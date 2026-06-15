@@ -38,7 +38,10 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.3"
+          # Flame 1.23+ uses the Flutter 3.27 Color API (withValues / Color.a),
+          # so the SDK must be >= 3.27. Keep this pinned and in lockstep with the
+          # flame version in pubspec.yaml.
+          flutter-version: "3.27.4"
           channel: stable
           cache: true
 
@@ -48,7 +51,11 @@ jobs:
       - name: Generate web platform files
         # The repo doesn't commit generated web/ scaffolding; create it for the
         # exact Flutter version in use. Non-destructive to lib/ and android/.
-        run: flutter create --platforms=web --project-name chicken_hunter_space_war .
+        # `flutter create` also drops a default test/widget_test.dart referencing
+        # a non-existent MyApp — remove it so it doesn't pollute analysis.
+        run: |
+          flutter create --platforms=web --project-name chicken_hunter_space_war .
+          rm -f test/widget_test.dart
 
       - name: Analyze (non-blocking)
         run: flutter analyze || true

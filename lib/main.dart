@@ -38,7 +38,7 @@ Future<void> main() async {
 
   runApp(
     MultiProvider(
-      providers: <SingleChildWidget>[
+      providers: [
         ChangeNotifierProvider<PlayerController>.value(value: player),
         ChangeNotifierProvider<BattlePassSystem>.value(value: battlePass),
         ChangeNotifierProvider<MissionSystem>.value(value: missions),
