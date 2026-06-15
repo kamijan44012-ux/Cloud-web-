@@ -79,6 +79,27 @@ safe). To wire real backend/monetisation, follow:
 
 ---
 
+## 🌐 Play in the browser (GitHub Pages)
+
+A GitHub Actions workflow (`.github/workflows/deploy-web.yml`) builds the Flutter
+**web** version and publishes it to GitHub Pages on every push to the main dev
+branch.
+
+**One-time setup:** in the repo, go to **Settings → Pages → Build and deployment**
+and set **Source** to **GitHub Actions**. After the next push (or a manual run
+from the **Actions** tab), the game is live at:
+
+```
+https://<your-username>.github.io/<repo-name>/
+```
+
+The workflow auto-detects the repo name for the correct base path, generates the
+`web/` scaffolding, and builds with the CanvasKit renderer for smooth particle
+performance. Mobile-only plugins (AdMob, Play Billing) are automatically
+disabled on web via `kIsWeb`, so the browser build is clean and ad-free.
+
+---
+
 ## 🗂 Project structure
 
 ```

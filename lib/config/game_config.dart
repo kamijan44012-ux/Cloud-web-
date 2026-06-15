@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// Global, build-time configuration for Chicken Hunter: Space War.
@@ -14,10 +15,14 @@ class GameConfig {
 
   // ---------------------------------------------------------------------------
   // Feature flags. Flip these off to ship a leaner / offline build.
+  //
+  // AdMob (google_mobile_ads) and Play Billing (in_app_purchase) are mobile-only
+  // plugins, so they are auto-disabled on web (e.g. the GitHub Pages demo build).
+  // Firebase and audio work on web, so they stay on (and remain fail-soft).
   // ---------------------------------------------------------------------------
   static const bool enableFirebase = true;
-  static const bool enableAds = true;
-  static const bool enableIap = true;
+  static const bool enableAds = !kIsWeb;
+  static const bool enableIap = !kIsWeb;
   static const bool enableAudio = true;
 
   // ---------------------------------------------------------------------------

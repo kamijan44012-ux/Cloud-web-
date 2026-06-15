@@ -1,0 +1,85 @@
+# Builds the Flutter web version of Chicken Hunter: Space War and deploys it to
+# GitHub Pages automatically on every push to the main development branch.
+#
+# Before the first run, enable Pages once in the repo:
+#   Settings → Pages → Build and deployment → Source: "GitHub Actions".
+#
+# The game's mobile-only plugins (AdMob, Play Billing) are auto-disabled on web
+# via kIsWeb in lib/config/game_config.dart, so the web build is clean. Firebase
+# and audio still work (fail-soft without config).
+name: Deploy web to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "claude/**"
+  workflow_dispatch: # allow manual runs from the Actions tab
+
+# Allow this workflow to publish to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; cancel superseded in-progress runs.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.3"
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate web platform files
+        # The repo doesn't commit generated web/ scaffolding; create it for the
+        # exact Flutter version in use. Non-destructive to lib/ and android/.
+        run: flutter create --platforms=web --project-name chicken_hunter_space_war .
+
+      - name: Analyze (non-blocking)
+        run: flutter analyze || true
+
+      - name: Build web
+        # base-href must match the GitHub Pages sub-path (/<repo-name>/).
+        # canvaskit renderer gives the smoothest Canvas/particle performance.
+        run: >
+          flutter build web --release
+          --web-renderer canvaskit
+          --base-href "/${{ github.event.repository.name }}/"
+
+      - name: Add SPA + Jekyll fixups
+        # 404.html lets deep links work; .nojekyll stops Pages from hiding
+        # files/folders that start with an underscore (Flutter emits some).
+        run: |
+          cp build/web/index.html build/web/404.html
+          touch build/web/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
