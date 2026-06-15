@@ -14,15 +14,15 @@ import 'effects/explosion.dart';
 import 'enemies/boss_chicken.dart';
 import 'enemies/enemy_chicken.dart';
 
-/// The player's spaceship. It is *dragged* by the player (the game forwards the
-/// finger position into [targetPosition]); the ship eases toward that point so
-/// movement feels smooth rather than teleporting. It auto-fires the equipped
-/// weapon on a timer modulated by buffs and ship stats.
+/// The player's spaceship. Dragged by the player (the game forwards the finger
+/// position into [targetPosition]); the ship eases toward that point, banks
+/// into turns, and fires the equipped weapon automatically. Rendered with a
+/// shaded hull, glowing cockpit, twin animated thrusters and a shield bubble.
 class PlayerShip extends PositionComponent
     with CollisionCallbacks, HasGameReference<ChickenHunterGame> {
   PlayerShip({required this.ship, required this.maxHealth})
       : health = maxHealth,
-        super(anchor: Anchor.center, size: Vector2(56, 64));
+        super(anchor: Anchor.center, size: Vector2(60, 70));
 
   final ShipData ship;
   final double maxHealth;
@@ -31,7 +31,9 @@ class PlayerShip extends PositionComponent
   Vector2 targetPosition = Vector2.zero();
   double _fireTimer = 0;
   double _thrust = 0;
-  double _invuln = 0; // brief i-frames after taking a hit
+  double _invuln = 0;
+  double _bank = 0; // -1..1 visual roll
+  double _lastX = 0;
 
   bool get isAlive => health > 0;
 
@@ -39,21 +41,26 @@ class PlayerShip extends PositionComponent
   Future<void> onLoad() async {
     position = Vector2(game.size.x / 2, game.size.y * 0.82);
     targetPosition = position.clone();
-    add(CircleHitbox(radius: 18, anchor: Anchor.center)
-      ..position = size / 2);
+    _lastX = position.x;
+    add(CircleHitbox(radius: 18, anchor: Anchor.center)..position = size / 2);
   }
 
   @override
   void update(double dt) {
     if (!isAlive) return;
     _invuln = max(0, _invuln - dt);
-    _thrust = (_thrust + dt * 6) % (pi * 2);
+    _thrust += dt * 12;
 
-    // Smooth follow toward the player's finger, clamped to the screen.
     final Vector2 delta = targetPosition - position;
     position += delta * min(1.0, dt * 12);
     position.x = position.x.clamp(size.x / 2, game.size.x - size.x / 2);
     position.y = position.y.clamp(size.y / 2, game.size.y - size.y / 2);
+
+    // Bank toward horizontal movement, easing back to level.
+    final double vx = (position.x - _lastX) / max(dt, 0.0001);
+    _lastX = position.x;
+    final double targetBank = (vx / 400).clamp(-1.0, 1.0);
+    _bank += (targetBank - _bank) * min(1.0, dt * 8);
 
     _handleFiring(dt);
   }
@@ -72,13 +79,12 @@ class PlayerShip extends PositionComponent
     double damage = stats.damage * ship.damageMultiplier;
     if (game.buffs.doubleDamage) damage *= 2;
 
-    // Spread based on the ship's gun count.
     final int guns = ship.bulletCount;
-    final double spread = (guns - 1) * 10.0;
+    final double spread = (guns - 1) * 11.0;
     for (int i = 0; i < guns; i++) {
       final double offsetX = guns == 1 ? 0 : -spread / 2 + (spread / (guns - 1)) * i;
       game.spawnPlayerBullet(Bullet(
-        position: position + Vector2(offsetX, -size.y / 2),
+        position: position + Vector2(offsetX, -size.y / 2 + 6),
         velocity: Vector2(0, -stats.projectileSpeed),
         damage: damage,
         team: BulletTeam.player,
@@ -100,29 +106,29 @@ class PlayerShip extends PositionComponent
       other.removeFromParent();
     } else if (other is EnemyChicken) {
       takeDamage(other.stats.contactDamage);
-      other.takeDamage(99999); // the chicken splatters on contact
+      other.takeDamage(99999);
     } else if (other is BossChicken) {
       takeDamage(other.stats.contactDamage);
     }
   }
 
-  /// Apply incoming damage, respecting the shield buff and i-frames. Returns
-  /// true if the ship was destroyed.
   bool takeDamage(double amount) {
     if (!isAlive || _invuln > 0) return false;
-    if (game.buffs.shield) return false; // shield fully absorbs
+    if (game.buffs.shield) return false;
     health -= amount;
     _invuln = 0.6;
     game.onPlayerDamaged();
+    game.shake(6);
     if (health <= 0) {
       health = 0;
       game.add(Explosion(
         position: position.clone(),
         color: ship.color,
-        particleCount: 40,
-        maxRadius: 60,
-        lifetime: 0.9,
+        particleCount: 48,
+        maxRadius: 70,
+        lifetime: 1.0,
       ));
+      game.shake(16);
       AudioService.instance.explosion();
       return true;
     }
@@ -139,42 +145,88 @@ class PlayerShip extends PositionComponent
   @override
   void render(Canvas canvas) {
     final double w = size.x, h = size.y;
-    if (_invuln > 0 && (_invuln * 20).floor().isEven) {
-      // Blink while invulnerable.
-      return;
+    final Offset c = Offset(w / 2, h / 2);
+    if (_invuln > 0 && (_invuln * 20).floor().isEven) return; // blink
+
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(_bank * 0.22); // bank into turns
+    canvas.translate(-c.dx, -c.dy);
+
+    // --- Twin engine flames ---
+    final double flick = 0.55 + sin(_thrust) * 0.25 + Random().nextDouble() * 0.1;
+    for (final double ex in <double>[w * 0.36, w * 0.64]) {
+      final Path flame = Path()
+        ..moveTo(ex - w * 0.06, h * 0.8)
+        ..lineTo(ex, h * (0.92 + flick * 0.18))
+        ..lineTo(ex + w * 0.06, h * 0.8)
+        ..close();
+      canvas.drawPath(flame, Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[Palette.hudYellow, Palette.hudRed, Colors.transparent],
+        ).createShader(Rect.fromLTWH(ex - w * 0.06, h * 0.8, w * 0.12, h * 0.3)));
+      canvas.drawCircle(Offset(ex, h * 0.82), w * 0.07,
+          Paint()..color = Palette.hudBlue.withOpacity(0.6)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
     }
 
-    // Engine flame.
-    final double flicker = 0.6 + sin(_thrust * 3) * 0.4;
-    final Path flame = Path()
-      ..moveTo(w * 0.4, h * 0.85)
-      ..lineTo(w * 0.5, h * (0.95 + flicker * 0.12))
-      ..lineTo(w * 0.6, h * 0.85)
+    // --- Wings (under hull) ---
+    final Paint wingPaint = Paint()..color = HSLColor.fromColor(ship.color).withLightness(0.35).toColor();
+    final Path wings = Path()
+      ..moveTo(w * 0.5, h * 0.45)
+      ..lineTo(w * 0.02, h * 0.82)
+      ..lineTo(w * 0.2, h * 0.6)
+      ..lineTo(w * 0.5, h * 0.55)
+      ..lineTo(w * 0.8, h * 0.6)
+      ..lineTo(w * 0.98, h * 0.82)
       ..close();
-    canvas.drawPath(flame, Paint()..color = Palette.hudYellow.withOpacity(0.9));
+    canvas.drawPath(wings, wingPaint);
 
-    // Hull.
+    // --- Main hull (shaded) ---
     final Path hull = Path()
-      ..moveTo(w * 0.5, 0)
-      ..lineTo(w * 0.92, h * 0.78)
-      ..lineTo(w * 0.5, h * 0.62)
-      ..lineTo(w * 0.08, h * 0.78)
+      ..moveTo(w * 0.5, h * 0.02)
+      ..cubicTo(w * 0.78, h * 0.2, w * 0.85, h * 0.6, w * 0.66, h * 0.82)
+      ..lineTo(w * 0.34, h * 0.82)
+      ..cubicTo(w * 0.15, h * 0.6, w * 0.22, h * 0.2, w * 0.5, h * 0.02)
       ..close();
-    canvas.drawPath(hull, Paint()..color = ship.color);
+    canvas.drawPath(hull, Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: <Color>[
+          HSLColor.fromColor(ship.color).withLightness(0.7).toColor(),
+          ship.color,
+          HSLColor.fromColor(ship.color).withLightness(0.3).toColor(),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, w, h)));
     canvas.drawPath(hull, Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = Colors.white.withOpacity(0.85));
+      ..strokeWidth = 1.5
+      ..color = Colors.white.withOpacity(0.8));
 
-    // Cockpit.
-    canvas.drawCircle(Offset(w * 0.5, h * 0.34), 7, Paint()..color = Palette.hudBlue);
+    // Hull racing stripe.
+    canvas.drawLine(Offset(w * 0.5, h * 0.1), Offset(w * 0.5, h * 0.78),
+        Paint()..color = Colors.white.withOpacity(0.4)..strokeWidth = 2);
 
-    // Shield bubble.
+    // --- Cockpit (glowing) ---
+    canvas.drawCircle(Offset(w * 0.5, h * 0.32), 9,
+        Paint()..color = Palette.hudBlue.withOpacity(0.5)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+    canvas.drawCircle(Offset(w * 0.5, h * 0.32), 7, Paint()
+      ..shader = const RadialGradient(colors: <Color>[Colors.white, Palette.hudBlue])
+          .createShader(Rect.fromCircle(center: Offset(w * 0.5, h * 0.32), radius: 7)));
+
+    canvas.restore();
+
+    // --- Shield bubble (outside the bank transform) ---
     if (game.buffs.shield) {
-      canvas.drawCircle(Offset(w / 2, h / 2), w * 0.75, Paint()
+      final double pulse = 0.5 + sin(_thrust * 0.6) * 0.2;
+      canvas.drawCircle(c, w * 0.78, Paint()
+        ..color = Palette.hudBlue.withOpacity(pulse)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..color = Palette.hudBlue.withOpacity(0.6 + sin(_thrust * 4) * 0.2));
+        ..strokeWidth = 3);
+      canvas.drawCircle(c, w * 0.78, Paint()
+        ..color = Palette.hudBlue.withOpacity(0.12));
     }
   }
 }

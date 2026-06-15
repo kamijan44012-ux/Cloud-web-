@@ -53,15 +53,39 @@ class PowerUp extends PositionComponent
   void render(Canvas canvas) {
     final double pulse = 0.85 + sin(_t * 6) * 0.15;
     final Offset c = Offset(size.x / 2, size.y / 2);
-    canvas.drawCircle(c, 20 * pulse,
-        Paint()..color = info.color.withOpacity(0.25)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
-    canvas.drawCircle(c, 16, Paint()..color = info.color);
-    canvas.drawCircle(c, 16, Paint()
+
+    // Soft outer glow.
+    canvas.drawCircle(c, 22 * pulse,
+        Paint()..color = info.color.withOpacity(0.3)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+
+    // Rotating dashed energy ring.
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(_t * 2);
+    final Paint ring = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = Colors.white.withOpacity(0.9));
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white.withOpacity(0.85);
+    for (int i = 0; i < 8; i++) {
+      final double a = i * pi / 4;
+      canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: 20),
+          a, pi / 8, false, ring);
+    }
+    canvas.restore();
+
+    // Coin/orb body with a gradient.
+    canvas.drawCircle(c, 15, Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-0.3, -0.3),
+        colors: <Color>[
+          HSLColor.fromColor(info.color).withLightness(0.75).toColor(),
+          info.color,
+        ],
+      ).createShader(Rect.fromCircle(center: c, radius: 15)));
+
     final TextPainter tp = TextPainter(
-      text: TextSpan(text: info.glyph, style: const TextStyle(fontSize: 18)),
+      text: TextSpan(text: info.glyph, style: const TextStyle(fontSize: 17)),
       textDirection: TextDirection.ltr,
     )..layout();
     tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));

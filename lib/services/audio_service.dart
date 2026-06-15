@@ -56,7 +56,7 @@ class AudioService {
   void click() => play('click.wav', volume: 0.6);
   void levelUp() => play('level_up.wav');
 
-  void startMusic([String track = 'bgm_battle.mp3']) {
+  void startMusic([String track = 'bgm_battle.wav']) {
     if (!GameConfig.enableAudio || !musicEnabled) return;
     try {
       FlameAudio.bgm.initialize();

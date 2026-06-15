@@ -10,6 +10,7 @@ import '../../../services/audio_service.dart';
 import '../../chicken_hunter_game.dart';
 import '../bullets/bullet.dart';
 import '../effects/explosion.dart';
+import 'chicken_art.dart';
 
 /// Mini-boss and Giant Galactic Boss. Drives a small state machine that cycles
 /// through attack patterns and ramps aggression as its health drops (phases).
@@ -34,7 +35,9 @@ class BossChicken extends PositionComponent
   double _patternTimer = 0;
   int _patternIndex = 0;
   double _bob = 0;
+  double _wing = 0;
   double _hitFlash = 0;
+  double _telegraph = 0; // glows just before firing
   int _phase = 1;
 
   double get healthFraction => (health / stats.maxHealth).clamp(0.0, 1.0);
@@ -50,7 +53,9 @@ class BossChicken extends PositionComponent
   void update(double dt) {
     if (game.isFrozen) return;
     _hitFlash = max(0, _hitFlash - dt);
+    _telegraph = max(0, _telegraph - dt);
     _bob += dt;
+    _wing += dt * 5;
 
     if (!_entered) {
       position.y += stats.speed * dt;
@@ -67,6 +72,8 @@ class BossChicken extends PositionComponent
     final double interval = stats.shootInterval / _phase;
 
     _patternTimer += dt;
+    // Telegraph (glow) in the last 0.3s before a volley.
+    if (interval - _patternTimer < 0.3) _telegraph = 1;
     if (_patternTimer >= interval) {
       _patternTimer = 0;
       _firePattern();
@@ -136,6 +143,7 @@ class BossChicken extends PositionComponent
     if (health <= 0) return false;
     health -= amount;
     _hitFlash = 0.08;
+    game.shake(3);
     if (health <= 0) {
       _die();
       return true;
@@ -163,46 +171,57 @@ class BossChicken extends PositionComponent
   void render(Canvas canvas) {
     final double r = stats.radius;
     final Offset c = Offset(r, r);
-    final bool flash = _hitFlash > 0;
 
-    // Aura.
-    canvas.drawCircle(c, r * 1.15,
-        Paint()..color = Palette.chickenBoss.withOpacity(0.18)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14));
+    // Pulsing menace aura, brighter when telegraphing an attack.
+    final double auraPulse = 0.18 + (sin(_bob * 4) + 1) * 0.06 + _telegraph * 0.35;
+    canvas.drawCircle(c, r * (1.25 + _telegraph * 0.15),
+        Paint()
+          ..color = Palette.chickenBoss.withOpacity(auraPulse)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18));
 
-    // Body.
-    canvas.drawCircle(c, r * 0.9, Paint()..color = flash ? Colors.white : stats.color);
-    canvas.drawCircle(c, r * 0.9, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5
-      ..color = Palette.hudYellow);
+    // The boss is a giant, crowned chicken — reuse the shared art at scale.
+    ChickenArt.draw(
+      canvas,
+      center: c,
+      radius: r * 0.92,
+      bodyColor: stats.color,
+      type: stats.type,
+      wing: _wing,
+      bob: sin(_bob * 2),
+      blink: false,
+      flash: _hitFlash > 0,
+    );
 
-    // Crown for the galactic boss.
-    if (stats.type == EnemyType.galacticBoss) {
-      final Path crown = Path()
-        ..moveTo(r * 0.45, r * 0.2)
-        ..lineTo(r * 0.6, -r * 0.25)
-        ..lineTo(r * 0.8, r * 0.1)
-        ..lineTo(r, -r * 0.35)
-        ..lineTo(r * 1.2, r * 0.1)
-        ..lineTo(r * 1.4, -r * 0.25)
-        ..lineTo(r * 1.55, r * 0.2)
-        ..close();
-      canvas.drawPath(crown, Paint()..color = Palette.hudYellow);
+    // Golden crown on top.
+    final Path crown = Path()
+      ..moveTo(r * 0.45, r * 0.35)
+      ..lineTo(r * 0.6, -r * 0.2)
+      ..lineTo(r * 0.8, r * 0.2)
+      ..lineTo(r, -r * 0.35)
+      ..lineTo(r * 1.2, r * 0.2)
+      ..lineTo(r * 1.4, -r * 0.2)
+      ..lineTo(r * 1.55, r * 0.35)
+      ..close();
+    canvas.drawPath(crown, Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[Color(0xFFFFF1A8), Palette.coin],
+      ).createShader(Rect.fromLTWH(r * 0.45, -r * 0.35, r * 1.1, r * 0.7)));
+    for (final double jx in <double>[0.6, 1.0, 1.4]) {
+      canvas.drawCircle(Offset(r * jx, -r * 0.1), r * 0.06, Paint()..color = Palette.hudRed);
     }
 
-    // Angry eyes.
-    final Paint white = Paint()..color = Colors.white;
-    canvas.drawCircle(Offset(r * 0.7, r), r * 0.18, white);
-    canvas.drawCircle(Offset(r * 1.3, r), r * 0.18, white);
-    canvas.drawCircle(Offset(r * 0.72, r * 1.05), r * 0.09, Paint()..color = Palette.hudRed);
-    canvas.drawCircle(Offset(r * 1.28, r * 1.05), r * 0.09, Paint()..color = Palette.hudRed);
-
-    // Beak.
-    final Path beak = Path()
-      ..moveTo(r * 0.78, r * 1.55)
-      ..lineTo(r * 1.22, r * 1.55)
-      ..lineTo(r, r * 1.95)
-      ..close();
-    canvas.drawPath(beak, Paint()..color = Palette.beak);
+    // Boss health bar floating above.
+    final double w = r * 2.2;
+    final double frac = healthFraction;
+    final Rect bg = Rect.fromLTWH(r - w / 2, -r * 0.55, w, 8);
+    canvas.drawRRect(RRect.fromRectAndRadius(bg, const Radius.circular(4)),
+        Paint()..color = Colors.black54);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Rect.fromLTWH(r - w / 2, -r * 0.55, w * frac, 8), const Radius.circular(4)),
+      Paint()..color = Color.lerp(Palette.hudRed, Palette.hudGreen, frac)!,
+    );
   }
 }

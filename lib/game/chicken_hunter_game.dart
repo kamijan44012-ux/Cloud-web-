@@ -19,6 +19,7 @@ import '../systems/mission_system.dart';
 import '../systems/player_controller.dart';
 import 'components/bullets/bullet.dart';
 import 'components/effects/explosion.dart';
+import 'components/effects/floating_text.dart';
 import 'components/enemies/boss_chicken.dart';
 import 'components/enemies/enemy_chicken.dart';
 import 'components/player_ship.dart';
@@ -79,8 +80,26 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
   bool get isFrozen => buffs.timeFreeze;
   Vector2 get playerPosition => _ship.position;
 
+  // Screen-shake state. Components call shake() on impacts; render() applies it.
+  double _shake = 0;
+  void shake(double intensity) => _shake = max(_shake, intensity);
+
   @override
   Color backgroundColor() => Palette.spaceTop;
+
+  @override
+  void render(Canvas canvas) {
+    if (_shake > 0.2) {
+      final double dx = (_rng.nextDouble() * 2 - 1) * _shake;
+      final double dy = (_rng.nextDouble() * 2 - 1) * _shake;
+      canvas.save();
+      canvas.translate(dx, dy);
+      super.render(canvas);
+      canvas.restore();
+    } else {
+      super.render(canvas);
+    }
+  }
 
   @override
   Future<void> onLoad() async {
@@ -125,6 +144,7 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     buffs.tick(dt);
     activeBuffs.value = buffs.active;
     if (_waveBanner > 0) _waveBanner -= dt;
+    if (_shake > 0) _shake = max(0, _shake - dt * 45);
 
     // Stream in normal-wave enemies.
     final EnemyType? toSpawn = _waves.tick(dt);
@@ -186,6 +206,11 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     _chargeNuke(0.02);
     missions.report(MissionMetric.killChickens, 1);
     for (final String _ in achievements.reportKills(1)) {/* UI toast */}
+    add(FloatingText(
+      position: enemy.position.clone(),
+      text: '+${enemy.stats.coinReward}',
+      color: Palette.coin,
+    ));
     _maybeDropPowerUp(enemy.position, enemy.stats.type);
   }
 
@@ -195,8 +220,16 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     _earnCoins(boss.stats.coinReward);
     _chargeNuke(0.5);
     _waves.onBossDefeated();
+    shake(22);
     missions.report(MissionMetric.killBosses, 1);
     for (final String _ in achievements.reportBossKill()) {/* UI toast */}
+    add(FloatingText(
+      position: boss.position.clone(),
+      text: 'BOSS DOWN! +${boss.stats.coinReward}',
+      color: Palette.hudYellow,
+      fontSize: 24,
+      lifetime: 1.4,
+    ));
     // Bosses always drop a treat.
     _spawnPowerUp(boss.position, PowerUpType.coinBurst);
   }
@@ -238,6 +271,7 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     if (!isNukeReady || state.value != RunState.playing) return;
     nukeCharge.value = 0;
     AudioService.instance.nuke();
+    shake(26);
     missions.report(MissionMetric.useUltimate, 1);
     // Flash + wipe.
     for (final EnemyChicken e in List<EnemyChicken>.from(children.whereType<EnemyChicken>())) {
@@ -349,7 +383,7 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
 
     // Commit to the meta game.
     player.recordRun(score: result.score, wave: result.wave, coinsEarned: result.coins);
-    player.addXp(xpEarned);
+    if (player.addXp(xpEarned) > 0) AudioService.instance.levelUp();
     battlePass.addXp(result.wave * 10 + result.bossKills * 50);
     missions.report(MissionMetric.playRuns, 1);
 

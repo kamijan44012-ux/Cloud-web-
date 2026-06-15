@@ -10,17 +10,19 @@ import '../../../services/audio_service.dart';
 import '../../chicken_hunter_game.dart';
 import '../bullets/bullet.dart';
 import '../effects/explosion.dart';
+import 'chicken_art.dart';
 
 /// A single enemy chicken. One class drives every non-boss type; the behaviour
-/// branch is selected by [stats.type] in [update]. This keeps spawning trivial
-/// and all the AI in one readable place.
+/// branch is selected by [stats.type] in [update]. Visuals are fully animated
+/// (flapping wings, body bob, spawn pop-in, hit squash, eye blinks) and drawn
+/// by [ChickenArt] so there are no sprite assets to ship.
 ///
 /// AI summary:
 ///  - normal:   drifts down with a gentle sine weave.
 ///  - fast:     dives straight down, quickly.
-///  - armored:  slow tank; flashes when its "armour" absorbs a hit.
+///  - armored:  slow tank; wears a metal helmet and shrugs off damage.
 ///  - laser:    descends to a hover line, strafes, and fires aimed bolts.
-///  - kamikaze: accelerates toward the player's last position to ram them.
+///  - kamikaze: accelerates toward the player to ram them, fuse sparking.
 class EnemyChicken extends PositionComponent
     with CollisionCallbacks, HasGameReference<ChickenHunterGame> {
   EnemyChicken({required Vector2 position, required this.stats})
@@ -32,29 +34,49 @@ class EnemyChicken extends PositionComponent
 
   final Random _rng = Random();
   double _phase = 0;
+  double _wing = 0;
   double _shootTimer = 0;
   double _hoverTargetY = 0;
   int _strafeDir = 1;
   double _hitFlash = 0;
+  double _spawn = 0; // 0..1 pop-in
+  double _blink = 0; // >0 means eyes closed
+  double _blinkTimer = 0;
 
   bool get isDead => health <= 0;
 
   @override
   Future<void> onLoad() async {
     _phase = _rng.nextDouble() * pi * 2;
+    _wing = _rng.nextDouble() * pi * 2;
     _hoverTargetY = 120 + _rng.nextDouble() * 160;
     _strafeDir = _rng.nextBool() ? 1 : -1;
-    add(CircleHitbox(radius: stats.radius * 0.9, anchor: Anchor.center, position: size / 2));
+    _blinkTimer = 1.5 + _rng.nextDouble() * 3;
+    add(CircleHitbox(radius: stats.radius * 0.85, anchor: Anchor.center, position: size / 2));
   }
 
   @override
   void update(double dt) {
+    // Spawn pop-in always animates, even when frozen, so it never looks stuck.
+    _spawn = min(1, _spawn + dt * 5);
+
     if (game.isFrozen) {
       _hitFlash = max(0, _hitFlash - dt);
       return; // Time Freeze power-up halts enemy logic.
     }
+
     _phase += dt;
+    // Wings beat faster the faster the chicken moves.
+    _wing += dt * (8 + stats.speed * 0.03);
     _hitFlash = max(0, _hitFlash - dt);
+
+    // Occasional eye blink.
+    _blinkTimer -= dt;
+    if (_blinkTimer <= 0) {
+      _blink = 0.12;
+      _blinkTimer = 2 + _rng.nextDouble() * 3;
+    }
+    _blink = max(0, _blink - dt);
 
     switch (stats.type) {
       case EnemyType.normal:
@@ -63,6 +85,7 @@ class EnemyChicken extends PositionComponent
         break;
       case EnemyType.fast:
         position.y += stats.speed * dt;
+        position.x += sin(_phase * 6) * 14 * dt;
         break;
       case EnemyType.armored:
         position.y += stats.speed * dt;
@@ -86,7 +109,6 @@ class EnemyChicken extends PositionComponent
         position.y += stats.speed * dt;
     }
 
-    // Despawn if it flies off the bottom (counts as escaped).
     if (position.y > game.size.y + stats.radius * 2) {
       game.onEnemyEscaped(this);
       removeFromParent();
@@ -127,10 +149,9 @@ class EnemyChicken extends PositionComponent
   /// Apply damage; returns true if this hit was the kill.
   bool takeDamage(double amount) {
     if (isDead) return false;
-    // Armoured chickens shrug off a fraction of incoming damage.
     final double effective = stats.type == EnemyType.armored ? amount * 0.6 : amount;
     health -= effective;
-    _hitFlash = 0.12;
+    _hitFlash = 0.14;
     AudioService.instance.hit();
     if (isDead) {
       game.onEnemyKilled(this);
@@ -141,68 +162,62 @@ class EnemyChicken extends PositionComponent
   }
 
   void _die() {
+    // Feather burst + pop.
     game.add(Explosion(
       position: position.clone(),
       color: stats.color,
-      particleCount: 18,
+      particleCount: 20,
       maxRadius: stats.radius,
+      feathers: true,
     ));
     AudioService.instance.explosion();
     removeFromParent();
   }
 
-  // ---------------------------------------------------------------------------
-  // Cartoon chicken rendering (no sprite assets required).
-  // ---------------------------------------------------------------------------
   @override
   void render(Canvas canvas) {
     final double r = stats.radius;
     final Offset c = Offset(r, r);
-    final bool flash = _hitFlash > 0;
 
-    // Body.
-    final Paint body = Paint()..color = flash ? Colors.white : stats.color;
-    canvas.drawCircle(c, r * 0.85, body);
+    // Spawn pop-in with a little overshoot, plus a hit squash.
+    final double pop = _spawn < 1 ? _easeOutBack(_spawn) : 1.0;
+    final double squash = 1 - _hitFlash * 0.6;
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.scale(pop * (2 - squash), pop * squash);
+    canvas.translate(-c.dx, -c.dy);
 
-    // Armour plating ring for armored type.
-    if (stats.type == EnemyType.armored) {
-      canvas.drawCircle(c, r * 0.85, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4
-        ..color = const Color(0xFF6E7C90));
-    }
+    ChickenArt.draw(
+      canvas,
+      center: c,
+      radius: r,
+      bodyColor: stats.color,
+      type: stats.type,
+      wing: _wing,
+      bob: sin(_phase * 3),
+      blink: _blink > 0,
+      flash: _hitFlash > 0,
+    );
+    canvas.restore();
 
-    // Comb.
-    final Path comb = Path()
-      ..moveTo(r * 0.7, r * 0.25)
-      ..quadraticBezierTo(r, -r * 0.05, r * 1.3, r * 0.25)
-      ..close();
-    canvas.drawPath(comb, Paint()..color = Palette.comb);
-
-    // Beak (points down toward the player).
-    final Path beak = Path()
-      ..moveTo(r * 0.8, r * 1.5)
-      ..lineTo(r * 1.2, r * 1.5)
-      ..lineTo(r, r * 1.85)
-      ..close();
-    canvas.drawPath(beak, Paint()..color = Palette.beak);
-
-    // Eyes.
-    final Paint white = Paint()..color = Colors.white;
-    final Paint pupil = Paint()..color = Colors.black;
-    canvas.drawCircle(Offset(r * 0.72, r * 0.95), r * 0.16, white);
-    canvas.drawCircle(Offset(r * 1.28, r * 0.95), r * 0.16, white);
-    canvas.drawCircle(Offset(r * 0.74, r * 1.0), r * 0.08, pupil);
-    canvas.drawCircle(Offset(r * 1.26, r * 1.0), r * 0.08, pupil);
-
-    // Health bar for tougher enemies.
+    // Health bar for tougher enemies (outside the squash so it stays steady).
     if (stats.maxHealth > 40 && health < stats.maxHealth) {
-      final double w = r * 1.6;
+      final double w = r * 1.7;
       final double frac = (health / stats.maxHealth).clamp(0.0, 1.0);
-      final Rect bg = Rect.fromLTWH(r - w / 2, -8, w, 4);
-      canvas.drawRect(bg, Paint()..color = Colors.black54);
-      canvas.drawRect(Rect.fromLTWH(r - w / 2, -8, w * frac, 4),
-          Paint()..color = Palette.hudGreen);
+      final RRect bg = RRect.fromRectAndRadius(
+          Rect.fromLTWH(r - w / 2, -10, w, 5), const Radius.circular(3));
+      canvas.drawRRect(bg, Paint()..color = Colors.black54);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromLTWH(r - w / 2, -10, w * frac, 5), const Radius.circular(3)),
+        Paint()..color = Color.lerp(Palette.hudRed, Palette.hudGreen, frac)!,
+      );
     }
+  }
+
+  double _easeOutBack(double t) {
+    const double s = 1.70158;
+    final double u = t - 1;
+    return 1 + (s + 1) * u * u * u + s * u * u;
   }
 }
