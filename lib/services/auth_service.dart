@@ -196,6 +196,26 @@ class AuthService {
     }
   }
 
+  /// Instant play: signs in with just a display name (anonymous on Firebase
+  /// when available, on-device guest otherwise). No password, no friction.
+  Future<String?> signInAsGuest(String displayName) async {
+    if (_firebaseReady) {
+      try {
+        final UserCredential cred =
+            await FirebaseAuth.instance.signInAnonymously();
+        await cred.user?.updateDisplayName(
+            displayName.trim().isEmpty ? 'Player' : displayName.trim());
+        await cred.user?.reload();
+        _firebaseUser = FirebaseAuth.instance.currentUser;
+        _recompute();
+        return null;
+      } catch (e) {
+        debugPrint('Anonymous sign-in failed, using local guest: $e');
+      }
+    }
+    return LocalAuthService.instance.signInAsGuest(displayName);
+  }
+
   Future<String?> resetPassword(String email) async {
     if (!_firebaseReady) {
       return 'Password reset needs the online server, which isn\'t set up yet.';

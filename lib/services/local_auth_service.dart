@@ -99,6 +99,23 @@ class LocalAuthService {
     return null;
   }
 
+  /// Starts an instant session with just a display name — no password. Perfect
+  /// for jumping straight into the game and sharing with friends.
+  Future<String?> signInAsGuest(String displayName) async {
+    final String name =
+        displayName.trim().isEmpty ? 'Player' : displayName.trim();
+    final String id = 'guest_${DateTime.now().millisecondsSinceEpoch}@local';
+    _accounts[id] = <String, dynamic>{
+      'displayName': name,
+      'salt': '',
+      'hash': '',
+      'guest': true,
+    };
+    await _persistAccounts();
+    await _startSession(id);
+    return null;
+  }
+
   Future<void> signOut() async {
     try {
       await _prefs?.remove(_sessionKey);

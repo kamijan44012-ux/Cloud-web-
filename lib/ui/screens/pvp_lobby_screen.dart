@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../config/palette.dart';
 import '../../models/pvp_match.dart';
+import '../../services/auth_service.dart';
 import '../../services/cloud_save_service.dart';
 import '../../services/pvp_service.dart';
 import '../../systems/player_controller.dart';
@@ -61,11 +62,14 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
   // Identity helpers
   // ---------------------------------------------------------------------------
   String _myUid() {
-    final String? uid = CloudSaveService.instance.uid;
+    final String? uid =
+        AuthService.instance.currentUid ?? CloudSaveService.instance.uid;
     return uid ?? 'anon_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   String _myName() {
+    final String? name = AuthService.instance.currentDisplayName;
+    if (name != null && name.trim().isNotEmpty) return name.trim();
     final String uid = _myUid();
     final String suffix = uid.length >= 6
         ? uid.substring(uid.length - 6).toUpperCase()
