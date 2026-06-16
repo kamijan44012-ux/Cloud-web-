@@ -48,11 +48,13 @@ class EmailVerificationService {
         }),
       );
       if (res.statusCode == 200) return null;
-      debugPrint('EmailJS send failed: ${res.statusCode} ${res.body}');
-      return 'Could not send the code. Please try again.';
+      final String detail = res.body.trim();
+      debugPrint('EmailJS send failed: ${res.statusCode} $detail');
+      return 'Email error ${res.statusCode}: '
+          '${detail.isEmpty ? "no detail from EmailJS" : detail}';
     } catch (e) {
       debugPrint('EmailVerificationService.sendCode: $e');
-      return 'Network error sending the code. Please try again.';
+      return 'Network/CORS error contacting EmailJS: $e';
     }
   }
 
