@@ -2,10 +2,12 @@ import 'dart:math';
 
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
+import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/power_up_type.dart';
 import '../../chicken_hunter_game.dart';
+import '../../sprite_catalog.dart';
 import '../player_ship.dart';
 
 /// A floating collectible. Drifts downward, bobbing, until the player touches
@@ -56,7 +58,7 @@ class PowerUp extends PositionComponent
 
     // Soft outer glow.
     canvas.drawCircle(c, 22 * pulse,
-        Paint()..color = info.color.withOpacity(0.3)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+        Paint()..color = info.color.withOpacity(0.4)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
 
     // Rotating dashed energy ring.
     canvas.save();
@@ -66,7 +68,7 @@ class PowerUp extends PositionComponent
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
-      ..color = Colors.white.withOpacity(0.85);
+      ..color = info.color.withOpacity(0.9);
     for (int i = 0; i < 8; i++) {
       final double a = i * pi / 4;
       canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: 20),
@@ -74,20 +76,9 @@ class PowerUp extends PositionComponent
     }
     canvas.restore();
 
-    // Coin/orb body with a gradient.
-    canvas.drawCircle(c, 15, Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(-0.3, -0.3),
-        colors: <Color>[
-          HSLColor.fromColor(info.color).withLightness(0.75).toColor(),
-          info.color,
-        ],
-      ).createShader(Rect.fromCircle(center: c, radius: 15)));
-
-    final TextPainter tp = TextPainter(
-      text: TextSpan(text: info.glyph, style: const TextStyle(fontSize: 17)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+    // Real power-up icon sprite, gently bobbing in scale.
+    final Sprite sp = SpriteCatalog.instance.powerups[type]!;
+    final double s = 26 * pulse;
+    sp.render(canvas, position: Vector2(c.dx - s / 2, c.dy - s / 2), size: Vector2(s, s));
   }
 }

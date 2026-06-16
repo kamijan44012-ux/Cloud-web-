@@ -18,13 +18,13 @@ class AudioService {
   bool _cached = false;
 
   static const List<String> _sfx = <String>[
-    'laser.wav',
-    'explosion.wav',
+    'laser.mp3',
+    'explosion.mp3',
     'hit.wav',
     'powerup.wav',
     'coin.wav',
     'boss_roar.wav',
-    'nuke.wav',
+    'nuke.mp3',
     'click.wav',
     'level_up.wav',
   ];
@@ -46,15 +46,15 @@ class AudioService {
     } catch (_) {/* fail soft */}
   }
 
-  void laser() => play('laser.wav', volume: 0.4);
-  void explosion() => play('explosion.wav', volume: 0.7);
-  void hit() => play('hit.wav', volume: 0.5);
-  void powerUp() => play('powerup.wav');
+  void laser() => play('laser.mp3', volume: 0.35);
+  void explosion() => play('explosion.mp3', volume: 0.6);
+  void hit() => play('hit.wav', volume: 0.4);
+  void powerUp() => play('powerup.wav', volume: 0.6);
   void coin() => play('coin.wav', volume: 0.5);
-  void bossRoar() => play('boss_roar.wav');
-  void nuke() => play('nuke.wav');
+  void bossRoar() => play('boss_roar.wav', volume: 0.7);
+  void nuke() => play('nuke.mp3', volume: 0.8);
   void click() => play('click.wav', volume: 0.6);
-  void levelUp() => play('level_up.wav');
+  void levelUp() => play('level_up.wav', volume: 0.7);
 
   void startMusic([String track = 'bgm_battle.wav']) {
     if (!GameConfig.enableAudio || !musicEnabled) return;

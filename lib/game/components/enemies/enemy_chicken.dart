@@ -2,20 +2,21 @@ import 'dart:math';
 
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
+import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
 
 import '../../../config/palette.dart';
 import '../../../models/enemy_type.dart';
 import '../../../services/audio_service.dart';
 import '../../chicken_hunter_game.dart';
+import '../../sprite_catalog.dart';
 import '../bullets/bullet.dart';
 import '../effects/explosion.dart';
-import 'chicken_art.dart';
 
-/// A single enemy chicken. One class drives every non-boss type; the behaviour
-/// branch is selected by [stats.type] in [update]. Visuals are fully animated
-/// (flapping wings, body bob, spawn pop-in, hit squash, eye blinks) and drawn
-/// by [ChickenArt] so there are no sprite assets to ship.
+/// A single enemy. One class drives every non-boss type; the behaviour branch
+/// is selected by [stats.type] in [update]. Rendered from a real sprite (a
+/// chicken-piloted UFO saucer / alien fighter) with spawn pop-in, hit squash +
+/// white flash, gentle wobble, and a sprite explosion on death.
 ///
 /// AI summary:
 ///  - normal:   drifts down with a gentle sine weave.
@@ -44,10 +45,15 @@ class EnemyChicken extends PositionComponent
   double _blink = 0; // >0 means eyes closed
   double _blinkTimer = 0;
 
+  late final Sprite _sprite;
+  final Paint _flashPaint = Paint()
+    ..colorFilter = const ColorFilter.mode(Colors.white, BlendMode.srcATop);
+
   bool get isDead => health <= 0;
 
   @override
   Future<void> onLoad() async {
+    _sprite = SpriteCatalog.instance.enemy(stats.type, variant: variant);
     _phase = _rng.nextDouble() * pi * 2;
     _wing = _rng.nextDouble() * pi * 2;
     _hoverTargetY = 120 + _rng.nextDouble() * 160;
@@ -172,13 +178,21 @@ class EnemyChicken extends PositionComponent
   }
 
   void _die() {
-    // Feather burst + pop.
+    // Real sprite explosion animation + a few feathers for flavour.
+    game.add(SpriteAnimationComponent(
+      animation: SpriteCatalog.instance.explosion,
+      size: Vector2.all(stats.radius * 2.6),
+      anchor: Anchor.center,
+      position: position.clone(),
+      removeOnFinish: true,
+    ));
     game.add(Explosion(
       position: position.clone(),
       color: stats.color,
-      particleCount: 20,
-      maxRadius: stats.radius,
+      particleCount: 10,
+      maxRadius: stats.radius * 0.8,
       feathers: true,
+      shockwave: false,
     ));
     AudioService.instance.explosion();
     removeFromParent();
@@ -186,30 +200,26 @@ class EnemyChicken extends PositionComponent
 
   @override
   void render(Canvas canvas) {
-    final double r = stats.radius;
-    final Offset c = Offset(r, r);
-
-    // Spawn pop-in with a little overshoot, plus a hit squash.
+    // Spawn pop-in with a little overshoot, plus a hit squash + gentle wobble.
     final double pop = _spawn < 1 ? _easeOutBack(_spawn) : 1.0;
     final double squash = 1 - _hitFlash * 0.6;
-    canvas.save();
-    canvas.translate(c.dx, c.dy);
-    canvas.scale(pop * (2 - squash), pop * squash);
-    canvas.translate(-c.dx, -c.dy);
+    final double aspect = _sprite.srcSize.y / _sprite.srcSize.x;
+    final double w = size.x;
+    final double h = w * aspect;
 
-    ChickenArt.draw(
+    canvas.save();
+    canvas.translate(size.x / 2, size.y / 2);
+    canvas.rotate(sin(_phase * 2 + _wing) * 0.05);
+    canvas.scale(pop * (2 - squash), pop * squash);
+    _sprite.render(
       canvas,
-      center: c,
-      radius: r,
-      bodyColor: stats.color,
-      type: stats.type,
-      wing: _wing,
-      bob: sin(_phase * 3),
-      blink: _blink > 0,
-      flash: _hitFlash > 0,
-      variant: variant,
+      position: Vector2(-w / 2, -h / 2),
+      size: Vector2(w, h),
+      overridePaint: _hitFlash > 0 ? _flashPaint : null,
     );
     canvas.restore();
+
+    final double r = stats.radius;
 
     // Health bar for tougher enemies (outside the squash so it stays steady).
     if (stats.maxHealth > 40 && health < stats.maxHealth) {

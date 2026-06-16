@@ -51,7 +51,23 @@ class _GameScreenState extends State<GameScreen> {
     return Scaffold(
       body: Stack(
         children: <Widget>[
-          GameWidget<ChickenHunterGame>(game: _game),
+          GameWidget<ChickenHunterGame>(
+            game: _game,
+            loadingBuilder: (_) => const ColoredBox(
+              color: Palette.spaceTop,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    CircularProgressIndicator(color: Palette.hudGreen),
+                    SizedBox(height: 16),
+                    Text('Entering the chicken galaxy…',
+                        style: TextStyle(color: Colors.white70)),
+                  ],
+                ),
+              ),
+            ),
+          ),
           _warpBanner(),
           _topHud(),
           _buffChips(),

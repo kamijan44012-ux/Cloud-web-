@@ -46,5 +46,12 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/images/ship/
+    - assets/images/enemies/
+    - assets/images/bullets/
+    - assets/images/powerups/
+    - assets/images/fx/
+    - assets/images/bg/
+    - assets/images/ui/
     - assets/audio/
     - assets/data/

@@ -23,12 +23,14 @@ import 'components/effects/floating_text.dart';
 import 'components/effects/hyperspace.dart';
 import 'components/enemies/boss_chicken.dart';
 import 'components/enemies/enemy_chicken.dart';
+import 'components/nebula_background.dart';
 import 'components/planet.dart';
 import 'components/player_ship.dart';
 import 'components/powerups/power_up.dart';
 import 'components/star_field.dart';
 import 'managers/buff_manager.dart';
 import 'managers/wave_manager.dart';
+import 'sprite_catalog.dart';
 
 enum RunState { playing, paused, over }
 
@@ -121,6 +123,10 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     final double healthBonus = 1 + player.data.shipUpgradeLevel('health') * 0.1;
     final double maxHealth = _shipData.baseHealth * healthBonus;
 
+    // Load all sprite art + the explosion animation before the first frame.
+    await SpriteCatalog.instance.load(images);
+
+    add(NebulaBackground());
     add(StarField(areaSize: size));
     _spawnPlanet(initial: true); // a world already hanging in the sky
     _ship = PlayerShip(ship: _shipData, maxHealth: maxHealth);

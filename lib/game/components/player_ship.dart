@@ -2,13 +2,14 @@ import 'dart:math';
 
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
+import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
 
-import '../../config/palette.dart';
 import '../../models/ship_data.dart';
 import '../../models/weapon_data.dart';
 import '../../services/audio_service.dart';
 import '../chicken_hunter_game.dart';
+import '../sprite_catalog.dart';
 import 'bullets/bullet.dart';
 import 'effects/explosion.dart';
 import 'enemies/boss_chicken.dart';
@@ -16,13 +17,14 @@ import 'enemies/enemy_chicken.dart';
 
 /// The player's spaceship. Dragged by the player (the game forwards the finger
 /// position into [targetPosition]); the ship eases toward that point, banks
-/// into turns, and fires the equipped weapon automatically. Rendered with a
-/// shaded hull, glowing cockpit, twin animated thrusters and a shield bubble.
+/// into turns, and fires the equipped weapon automatically. Rendered from a
+/// real ship sprite with animated thrusters, a muzzle flash, a damage overlay
+/// when low on health, and a shield-bubble sprite.
 class PlayerShip extends PositionComponent
     with CollisionCallbacks, HasGameReference<ChickenHunterGame> {
   PlayerShip({required this.ship, required this.maxHealth})
       : health = maxHealth,
-        super(anchor: Anchor.center, size: Vector2(60, 70));
+        super(anchor: Anchor.center, size: Vector2(64, 64));
 
   final ShipData ship;
   final double maxHealth;
@@ -34,11 +36,17 @@ class PlayerShip extends PositionComponent
   double _invuln = 0;
   double _bank = 0; // -1..1 visual roll
   double _lastX = 0;
+  double _muzzle = 0; // muzzle-flash timer
+
+  late final Sprite _hull;
+  late final double _hullAspect;
 
   bool get isAlive => health > 0;
 
   @override
   Future<void> onLoad() async {
+    _hull = SpriteCatalog.instance.ship(ship.id);
+    _hullAspect = _hull.srcSize.y / _hull.srcSize.x;
     position = Vector2(game.size.x / 2, game.size.y * 0.82);
     targetPosition = position.clone();
     _lastX = position.x;
@@ -49,6 +57,7 @@ class PlayerShip extends PositionComponent
   void update(double dt) {
     if (!isAlive) return;
     _invuln = max(0, _invuln - dt);
+    _muzzle = max(0, _muzzle - dt);
     _thrust += dt * 12;
 
     final Vector2 delta = targetPosition - position;
@@ -94,6 +103,8 @@ class PlayerShip extends PositionComponent
         pierces: stats.pierces,
       ));
     }
+    _muzzle = 0.06;
+    game.shake(1.5);
     AudioService.instance.laser();
   }
 
@@ -148,85 +159,52 @@ class PlayerShip extends PositionComponent
     final Offset c = Offset(w / 2, h / 2);
     if (_invuln > 0 && (_invuln * 20).floor().isEven) return; // blink
 
+    final double hullW = w;
+    final double hullH = hullW * _hullAspect;
+
     canvas.save();
     canvas.translate(c.dx, c.dy);
-    canvas.rotate(_bank * 0.22); // bank into turns
-    canvas.translate(-c.dx, -c.dy);
+    canvas.rotate(_bank * 0.2); // bank into turns
 
-    // --- Twin engine flames ---
-    final double flick = 0.55 + sin(_thrust) * 0.25 + Random().nextDouble() * 0.1;
-    for (final double ex in <double>[w * 0.36, w * 0.64]) {
-      final Path flame = Path()
-        ..moveTo(ex - w * 0.06, h * 0.8)
-        ..lineTo(ex, h * (0.92 + flick * 0.18))
-        ..lineTo(ex + w * 0.06, h * 0.8)
-        ..close();
-      canvas.drawPath(flame, Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[Palette.hudYellow, Palette.hudRed, Colors.transparent],
-        ).createShader(Rect.fromLTWH(ex - w * 0.06, h * 0.8, w * 0.12, h * 0.3)));
-      canvas.drawCircle(Offset(ex, h * 0.82), w * 0.07,
-          Paint()..color = Palette.hudBlue.withOpacity(0.6)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+    // --- Engine thrusters (animated frames, pointing back/down) ---
+    final Sprite thr = (_thrust * 0.6).floor().isEven
+        ? SpriteCatalog.instance.thruster0
+        : SpriteCatalog.instance.thruster1;
+    final double tA = thr.srcSize.y / thr.srcSize.x;
+    const double tw = 9;
+    final double th = tw * tA;
+    for (final double ex in <double>[-hullW * 0.16, hullW * 0.16]) {
+      canvas.save();
+      canvas.translate(ex, hullH * 0.42);
+      canvas.rotate(pi); // flame points downward behind the ship
+      thr.render(canvas, position: Vector2(-tw / 2, -th / 2), size: Vector2(tw, th));
+      canvas.restore();
     }
 
-    // --- Wings (under hull) ---
-    final Paint wingPaint = Paint()..color = HSLColor.fromColor(ship.color).withLightness(0.35).toColor();
-    final Path wings = Path()
-      ..moveTo(w * 0.5, h * 0.45)
-      ..lineTo(w * 0.02, h * 0.82)
-      ..lineTo(w * 0.2, h * 0.6)
-      ..lineTo(w * 0.5, h * 0.55)
-      ..lineTo(w * 0.8, h * 0.6)
-      ..lineTo(w * 0.98, h * 0.82)
-      ..close();
-    canvas.drawPath(wings, wingPaint);
+    // --- Hull sprite ---
+    _hull.render(canvas, position: Vector2(-hullW / 2, -hullH / 2), size: Vector2(hullW, hullH));
 
-    // --- Main hull (shaded) ---
-    final Path hull = Path()
-      ..moveTo(w * 0.5, h * 0.02)
-      ..cubicTo(w * 0.78, h * 0.2, w * 0.85, h * 0.6, w * 0.66, h * 0.82)
-      ..lineTo(w * 0.34, h * 0.82)
-      ..cubicTo(w * 0.15, h * 0.6, w * 0.22, h * 0.2, w * 0.5, h * 0.02)
-      ..close();
-    canvas.drawPath(hull, Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: <Color>[
-          HSLColor.fromColor(ship.color).withLightness(0.7).toColor(),
-          ship.color,
-          HSLColor.fromColor(ship.color).withLightness(0.3).toColor(),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, w, h)));
-    canvas.drawPath(hull, Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = Colors.white.withOpacity(0.8));
+    // Damage overlay when badly hurt.
+    if (health / maxHealth < 0.4) {
+      SpriteCatalog.instance.playerDamage.render(canvas,
+          position: Vector2(-hullW / 2, -hullH / 2), size: Vector2(hullW, hullH));
+    }
 
-    // Hull racing stripe.
-    canvas.drawLine(Offset(w * 0.5, h * 0.1), Offset(w * 0.5, h * 0.78),
-        Paint()..color = Colors.white.withOpacity(0.4)..strokeWidth = 2);
-
-    // --- Cockpit (glowing) ---
-    canvas.drawCircle(Offset(w * 0.5, h * 0.32), 9,
-        Paint()..color = Palette.hudBlue.withOpacity(0.5)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
-    canvas.drawCircle(Offset(w * 0.5, h * 0.32), 7, Paint()
-      ..shader = const RadialGradient(colors: <Color>[Colors.white, Palette.hudBlue])
-          .createShader(Rect.fromCircle(center: Offset(w * 0.5, h * 0.32), radius: 7)));
+    // Muzzle flash at the nose.
+    if (_muzzle > 0) {
+      final double m = 16 * (_muzzle / 0.06);
+      SpriteCatalog.instance.sparkYellow.render(canvas,
+          position: Vector2(-m / 2, -hullH / 2 - m * 0.4), size: Vector2(m, m));
+    }
 
     canvas.restore();
 
-    // --- Shield bubble (outside the bank transform) ---
+    // --- Shield bubble sprite (outside the bank transform) ---
     if (game.buffs.shield) {
-      final double pulse = 0.5 + sin(_thrust * 0.6) * 0.2;
-      canvas.drawCircle(c, w * 0.78, Paint()
-        ..color = Palette.hudBlue.withOpacity(pulse)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3);
-      canvas.drawCircle(c, w * 0.78, Paint()
-        ..color = Palette.hudBlue.withOpacity(0.12));
+      final double pulse = 1.0 + sin(_thrust * 0.6) * 0.06;
+      final double sd = w * 1.5 * pulse;
+      SpriteCatalog.instance.shield.render(canvas,
+          position: Vector2(c.dx - sd / 2, c.dy - sd / 2), size: Vector2(sd, sd));
     }
   }
 }

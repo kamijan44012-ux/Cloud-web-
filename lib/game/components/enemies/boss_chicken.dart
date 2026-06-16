@@ -2,15 +2,16 @@ import 'dart:math';
 
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
+import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
 
 import '../../../config/palette.dart';
 import '../../../models/enemy_type.dart';
 import '../../../services/audio_service.dart';
 import '../../chicken_hunter_game.dart';
+import '../../sprite_catalog.dart';
 import '../bullets/bullet.dart';
 import '../effects/explosion.dart';
-import 'chicken_art.dart';
 
 /// Mini-boss and Giant Galactic Boss. Drives a small state machine that cycles
 /// through attack patterns and ramps aggression as its health drops (phases).
@@ -38,6 +39,8 @@ class BossChicken extends PositionComponent
   double _wing = 0;
   double _hitFlash = 0;
   double _telegraph = 0; // glows just before firing
+  final Paint _flashPaint = Paint()
+    ..colorFilter = const ColorFilter.mode(Colors.white, BlendMode.srcATop);
   int _phase = 1;
 
   double get healthFraction => (health / stats.maxHealth).clamp(0.0, 1.0);
@@ -152,12 +155,20 @@ class BossChicken extends PositionComponent
   }
 
   void _die() {
-    // Big multi-burst death sequence.
-    for (int i = 0; i < 6; i++) {
+    // Big multi-burst death sequence: several sprite blasts + particle bursts.
+    for (int i = 0; i < 5; i++) {
+      final Vector2 at = position + Vector2(_rng.nextDouble() * 90 - 45, _rng.nextDouble() * 90 - 45);
+      game.add(SpriteAnimationComponent(
+        animation: SpriteCatalog.instance.explosion,
+        size: Vector2.all(stats.radius * (1.4 + _rng.nextDouble())),
+        anchor: Anchor.center,
+        position: at,
+        removeOnFinish: true,
+      ));
       game.add(Explosion(
-        position: position + Vector2(_rng.nextDouble() * 80 - 40, _rng.nextDouble() * 80 - 40),
+        position: at,
         color: i.isEven ? Palette.chickenBoss : Palette.hudYellow,
-        particleCount: 24,
+        particleCount: 18,
         maxRadius: stats.radius * 0.8,
         lifetime: 0.7,
       ));
@@ -179,18 +190,21 @@ class BossChicken extends PositionComponent
           ..color = Palette.chickenBoss.withOpacity(auraPulse)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18));
 
-    // The boss is a giant, crowned chicken — reuse the shared art at scale.
-    ChickenArt.draw(
+    // The boss is a giant alien dreadnought sprite that wobbles menacingly.
+    final Sprite sp = SpriteCatalog.instance.enemies[stats.type]!;
+    final double aspect = sp.srcSize.y / sp.srcSize.x;
+    final double bw = r * 2.0;
+    final double bh = bw * aspect;
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(sin(_bob * 1.5) * 0.04);
+    sp.render(
       canvas,
-      center: c,
-      radius: r * 0.92,
-      bodyColor: stats.color,
-      type: stats.type,
-      wing: _wing,
-      bob: sin(_bob * 2),
-      blink: false,
-      flash: _hitFlash > 0,
+      position: Vector2(-bw / 2, -bh / 2),
+      size: Vector2(bw, bh),
+      overridePaint: _hitFlash > 0 ? _flashPaint : null,
     );
+    canvas.restore();
 
     // Golden crown on top.
     final Path crown = Path()

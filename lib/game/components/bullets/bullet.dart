@@ -1,13 +1,18 @@
+import 'dart:math';
+
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
+import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
+
+import '../../sprite_catalog.dart';
 
 enum BulletTeam { player, enemy }
 
 /// A projectile fired by the player or an enemy. Carries its own damage and
-/// behaviour flags (AOE, pierce). Renders a glowing core with a fading motion
-/// trail so fire feels energetic. Collision resolution lives in the entities
-/// the bullet hits (they read [damage]); the bullet just flags itself spent.
+/// behaviour flags (AOE, pierce). Renders a real laser sprite rotated to its
+/// travel direction with a soft glow. Collision resolution lives in the
+/// entities the bullet hits (they read [damage]); the bullet flags itself spent.
 class Bullet extends PositionComponent with CollisionCallbacks {
   Bullet({
     required Vector2 position,
@@ -29,26 +34,29 @@ class Bullet extends PositionComponent with CollisionCallbacks {
   final bool pierces;
 
   bool spent = false;
-  final List<Vector2> _trail = <Vector2>[];
+  late final Sprite _sprite;
+  late final double _angle; // rotation so the sprite points along velocity
+  final Paint _glow = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
 
   @override
   Future<void> onLoad() async {
+    _sprite = team == BulletTeam.player
+        ? SpriteCatalog.instance.laserPlayer
+        : SpriteCatalog.instance.laserEnemy;
+    // Kenney lasers point up (-Y); rotate to align with the velocity vector.
+    _angle = atan2(velocity.y, velocity.x) + pi / 2;
+    _glow.color = color.withOpacity(0.5);
     add(CircleHitbox(radius: radius, anchor: Anchor.center, position: size / 2)
       ..collisionType = CollisionType.passive);
   }
 
   @override
   void update(double dt) {
-    // Record trail in world space, capped to a few points.
-    _trail.add(position.clone());
-    if (_trail.length > 6) _trail.removeAt(0);
-
     position += velocity * dt;
-
     final Vector2? viewSize = findGame()?.size;
     if (viewSize != null) {
-      if (position.y < -40 || position.y > viewSize.y + 40 ||
-          position.x < -40 || position.x > viewSize.x + 40) {
+      if (position.y < -50 || position.y > viewSize.y + 50 ||
+          position.x < -50 || position.x > viewSize.x + 50) {
         removeFromParent();
       }
     }
@@ -57,23 +65,16 @@ class Bullet extends PositionComponent with CollisionCallbacks {
 
   @override
   void render(Canvas canvas) {
-    // Trail (in local space relative to the current position).
-    for (int i = 0; i < _trail.length; i++) {
-      final double f = (i + 1) / _trail.length;
-      final Offset local = Offset(
-        radius + (_trail[i].x - position.x),
-        radius + (_trail[i].y - position.y),
-      );
-      canvas.drawCircle(local, radius * f * 0.9,
-          Paint()..color = color.withOpacity(0.18 * f));
-    }
+    final double aspect = _sprite.srcSize.y / _sprite.srcSize.x;
+    final double w = radius * 2.0;
+    final double h = w * aspect; // lasers are long & thin
 
-    final Offset c = Offset(radius, radius);
-    // Outer glow.
-    canvas.drawCircle(c, radius * 2.0,
-        Paint()..color = color.withOpacity(0.35)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
-    // Core.
-    canvas.drawCircle(c, radius, Paint()..color = color);
-    canvas.drawCircle(c, radius * 0.5, Paint()..color = Colors.white);
+    canvas.save();
+    canvas.translate(radius, radius);
+    canvas.rotate(_angle);
+    // Soft glow behind the bolt.
+    canvas.drawCircle(Offset.zero, radius * 1.6, _glow);
+    _sprite.render(canvas, position: Vector2(-w / 2, -h / 2), size: Vector2(w, h));
+    canvas.restore();
   }
 }
