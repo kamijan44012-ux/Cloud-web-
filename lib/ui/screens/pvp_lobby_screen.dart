@@ -90,11 +90,15 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
     if (_createState != _CreateState.idle) return;
 
     final String code = PvpService.instance.generateCode();
+    // Show code + invite link IMMEDIATELY — user can copy it right now.
     setState(() {
       _roomCode = code;
       _createState = _CreateState.writing;
       _createError = null;
     });
+
+    // Yield a frame so Flutter renders the code before doing any I/O.
+    await Future<void>.delayed(Duration.zero);
 
     try {
       await PvpService.instance.createRoom(
@@ -106,11 +110,13 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _createState = _CreateState.idle;
-        _roomCode = null;
-        _createError = _friendlyError(e.toString());
-      });
+      // Keep _roomCode visible so user can still copy the link.
+      // Show a snackbar explaining Firebase needs to be configured.
+      setState(() => _createState = _CreateState.waiting);
+      _snack(
+        'Firebase not configured — set up Firestore to enable online play. '
+        'You can still copy the invite link.',
+      );
       return;
     }
 

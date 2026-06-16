@@ -1,10 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../config/game_config.dart';
-
-// NOTE: These imports require `flutterfire configure` to have generated
-// `firebase_options.dart` and added the platform configs. Until then, keep
-// GameConfig.enableFirebase = false and the app runs fully offline.
+import '../firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
@@ -26,12 +23,13 @@ class FirebaseService {
   Future<void> init() async {
     if (!GameConfig.enableFirebase) return;
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform);
       _analytics = FirebaseAnalytics.instance;
       await _initRemoteConfig();
       _ready = true;
     } catch (e) {
-      // Most commonly: firebase_options not generated yet. Fail soft.
+      // Fails if Firebase secrets not added to GitHub. App runs offline.
       debugPrint('Firebase init skipped: $e');
     }
   }
