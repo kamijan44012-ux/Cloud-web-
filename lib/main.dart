@@ -8,6 +8,7 @@ import 'services/audio_service.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_service.dart';
 import 'services/iap_service.dart';
+import 'services/profile_service.dart';
 import 'systems/achievement_system.dart';
 import 'systems/battle_pass.dart';
 import 'systems/mission_system.dart';
@@ -38,6 +39,9 @@ Future<void> main() async {
   // Wire up auth (Firebase when configured, on-device fallback otherwise) so
   // every player can register and sign in, even without Firebase secrets.
   await AuthService.instance.init();
+
+  // Load the locally-saved avatar/profile preference.
+  await ProfileService.instance.load();
 
   // Non-blocking background services.
   _initBackgroundServices(player);

@@ -7,10 +7,12 @@ import '../config/palette.dart';
 import '../models/player_data.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_save_service.dart';
+import '../services/profile_service.dart';
 import '../systems/player_controller.dart';
 import 'screens/auth_screen.dart';
 import 'screens/main_menu_screen.dart';
 import 'screens/pvp_lobby_screen.dart';
+import 'screens/verify_email_screen.dart';
 
 class ChickenHunterApp extends StatelessWidget {
   const ChickenHunterApp({super.key});
@@ -87,11 +89,17 @@ class _AuthGateState extends State<_AuthGate> {
     );
     final PlayerData? cloud = await CloudSaveService.instance.pull();
     if (cloud != null) player.mergeFromCloud(cloud);
+    // Pull the avatar chosen on another device.
+    await ProfileService.instance.syncFromCloud(user.uid);
   }
 
   @override
   Widget build(BuildContext context) {
     if (_user != null) {
+      // Email/password users must confirm their email before entering.
+      if (AuthService.instance.needsEmailVerification) {
+        return const VerifyEmailScreen();
+      }
       return const _HomeBootstrap();
     }
     return const AuthScreen();

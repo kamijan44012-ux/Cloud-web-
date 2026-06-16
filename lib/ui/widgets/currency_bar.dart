@@ -7,8 +7,11 @@ import '../../systems/player_controller.dart';
 /// Top-of-screen wallet showing coins, gems and player level. Reactively
 /// rebuilds whenever the [PlayerController] changes.
 class CurrencyBar extends StatelessWidget {
-  const CurrencyBar({super.key, this.showLevel = true});
+  const CurrencyBar({super.key, this.showLevel = true, this.leading});
   final bool showLevel;
+
+  /// Optional widget shown at the far left (e.g. a profile avatar button).
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -18,6 +21,10 @@ class CurrencyBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: <Widget>[
+            if (leading != null) ...<Widget>[
+              leading!,
+              const SizedBox(width: 8),
+            ],
             if (showLevel) ...<Widget>[
               _Pill(
                 color: Palette.xp,

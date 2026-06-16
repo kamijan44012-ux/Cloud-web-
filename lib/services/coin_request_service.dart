@@ -92,21 +92,33 @@ class CoinRequestService {
   }
 
   Stream<List<CoinRequest>> listenPendingRequests() {
+    // Sort client-side (oldest first) to avoid needing a Firestore composite
+    // index on (status, createdAt).
     return _col
         .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt')
         .snapshots()
-        .map((QuerySnapshot<Map<String, dynamic>> snap) =>
-            snap.docs.map(CoinRequest.fromDoc).toList());
+        .map((QuerySnapshot<Map<String, dynamic>> snap) {
+      final List<CoinRequest> list =
+          snap.docs.map(CoinRequest.fromDoc).toList();
+      list.sort((CoinRequest a, CoinRequest b) =>
+          a.createdAt.compareTo(b.createdAt));
+      return list;
+    });
   }
 
   Stream<List<CoinRequest>> listenMyRequests(String uid) {
+    // Sort client-side (newest first) to avoid needing a Firestore composite
+    // index on (uid, createdAt).
     return _col
         .where('uid', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((QuerySnapshot<Map<String, dynamic>> snap) =>
-            snap.docs.map(CoinRequest.fromDoc).toList());
+        .map((QuerySnapshot<Map<String, dynamic>> snap) {
+      final List<CoinRequest> list =
+          snap.docs.map(CoinRequest.fromDoc).toList();
+      list.sort((CoinRequest a, CoinRequest b) =>
+          b.createdAt.compareTo(a.createdAt));
+      return list;
+    });
   }
 
   Future<String?> approveRequest({

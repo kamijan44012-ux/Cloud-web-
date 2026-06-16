@@ -8,6 +8,7 @@ import '../../systems/daily_reward_system.dart';
 import '../../systems/player_controller.dart';
 import '../widgets/currency_bar.dart';
 import '../widgets/menu_button.dart';
+import '../widgets/profile_avatar_button.dart';
 import '../widgets/space_background.dart';
 import 'admin_panel_screen.dart';
 import 'coin_request_screen.dart';
@@ -117,7 +118,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       body: SpaceBackground(
         child: Column(
           children: <Widget>[
-            const CurrencyBar(),
+            const CurrencyBar(leading: ProfileAvatarButton()),
             const Spacer(),
             // Title.
             Column(

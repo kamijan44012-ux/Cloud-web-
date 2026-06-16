@@ -13,6 +13,10 @@ class AppUser {
     required this.email,
     required this.displayName,
     required this.isLocal,
+    this.emailVerified = true,
+    this.photoUrl,
+    this.isAnonymous = false,
+    this.isPasswordProvider = false,
   });
 
   final String uid;
@@ -21,6 +25,18 @@ class AppUser {
 
   /// True when this account lives only on this device (Firebase not configured).
   final bool isLocal;
+
+  /// Whether the email has been verified. Always true for local/Google/guest.
+  final bool emailVerified;
+
+  /// Avatar/photo URL (from Google sign-in), when available.
+  final String? photoUrl;
+
+  /// True for instant "Play as Guest" accounts.
+  final bool isAnonymous;
+
+  /// True when signed in with email + password (not Google/guest).
+  final bool isPasswordProvider;
 }
 
 class AuthService {
@@ -61,6 +77,63 @@ class AuthService {
   /// uses on-device email accounts and Google sign-in is unavailable.
   bool get isCloudEnabled => _firebaseReady;
 
+  /// True when the signed-in user registered with email/password and has not yet
+  /// confirmed their email. Google and guest accounts never need verification.
+  bool get needsEmailVerification {
+    final AppUser? u = userNotifier.value;
+    if (u == null || u.isLocal) return false;
+    return u.isPasswordProvider && !u.emailVerified;
+  }
+
+  /// Re-sends the verification email to the current user.
+  Future<String?> resendVerificationEmail() async {
+    if (!_firebaseReady) return 'Online server not available.';
+    try {
+      await FirebaseAuth.instance.currentUser?.sendEmailVerification();
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _authError(e);
+    } catch (e) {
+      return 'Could not send the email. Please try again.';
+    }
+  }
+
+  /// Reloads the Firebase user and refreshes state — call after the player says
+  /// they clicked the verification link to flip [needsEmailVerification].
+  Future<bool> reloadAndCheckVerified() async {
+    if (!_firebaseReady) return false;
+    try {
+      await FirebaseAuth.instance.currentUser?.reload();
+      _firebaseUser = FirebaseAuth.instance.currentUser;
+      _recompute();
+      return _firebaseUser?.emailVerified ?? false;
+    } catch (e) {
+      debugPrint('reloadAndCheckVerified: $e');
+      return false;
+    }
+  }
+
+  /// Updates the player's display name across Firebase Auth (and refreshes the
+  /// unified user). Returns an error message or null on success.
+  Future<String?> updateDisplayName(String name) async {
+    final String trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Please enter a name.';
+    if (_firebaseReady && _firebaseUser != null) {
+      try {
+        await _firebaseUser!.updateDisplayName(trimmed);
+        await _firebaseUser!.reload();
+        _firebaseUser = FirebaseAuth.instance.currentUser;
+        _recompute();
+        return null;
+      } catch (e) {
+        debugPrint('updateDisplayName: $e');
+        return 'Could not update name. Please try again.';
+      }
+    }
+    // Local accounts: nothing server-side, ProfileService handles persistence.
+    return null;
+  }
+
   // -- Lifecycle --------------------------------------------------------------
 
   /// Wires up auth listeners. Safe to call once at startup, after
@@ -92,11 +165,17 @@ class AuthService {
   void _recompute() {
     if (_firebaseUser != null) {
       final User u = _firebaseUser!;
+      final bool isPassword =
+          u.providerData.any((UserInfo p) => p.providerId == 'password');
       userNotifier.value = AppUser(
         uid: u.uid,
         email: u.email,
         displayName: u.displayName,
         isLocal: false,
+        emailVerified: u.emailVerified,
+        photoUrl: u.photoURL,
+        isAnonymous: u.isAnonymous,
+        isPasswordProvider: isPassword,
       );
       return;
     }
@@ -127,7 +206,15 @@ class AuthService {
           password: password,
         );
         await cred.user?.updateDisplayName(displayName.trim());
+        // Send the verification email so first-time users confirm ownership.
+        try {
+          await cred.user?.sendEmailVerification();
+        } catch (e) {
+          debugPrint('sendEmailVerification on signup: $e');
+        }
         await cred.user?.reload();
+        _firebaseUser = FirebaseAuth.instance.currentUser;
+        _recompute();
         return null;
       } on FirebaseAuthException catch (e) {
         return _authError(e);
