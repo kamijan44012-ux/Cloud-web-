@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../config/game_config.dart';
 import '../../config/palette.dart';
 import '../../services/auth_service.dart';
+import '../../services/referral_service.dart';
 import '../../systems/daily_reward_system.dart';
 import '../../systems/player_controller.dart';
 import '../widgets/currency_bar.dart';
@@ -14,6 +15,7 @@ import 'admin_panel_screen.dart';
 import 'coin_request_screen.dart';
 import 'game_screen.dart';
 import 'hangar_screen.dart';
+import 'invite_screen.dart';
 import 'pvp_lobby_screen.dart';
 import 'leaderboard_screen.dart';
 import 'missions_screen.dart';
@@ -162,6 +164,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     color: Palette.hudRed,
                     subtitle: '1v1 Online — Winner gets 100 coins',
                     onTap: () => _go(const PvpLobbyScreen()),
+                  ),
+                  const SizedBox(height: 12),
+                  MenuButton(
+                    label: 'Invite Friends',
+                    icon: Icons.card_giftcard,
+                    color: Palette.hudGreen,
+                    subtitle: 'Earn ${ReferralService.inviterBonus} coins per friend',
+                    onTap: () => _go(const InviteScreen()),
                   ),
                   const SizedBox(height: 12),
                   MenuButton(

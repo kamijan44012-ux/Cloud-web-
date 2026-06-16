@@ -8,6 +8,7 @@ import '../models/player_data.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_save_service.dart';
 import '../services/profile_service.dart';
+import '../services/referral_service.dart';
 import '../systems/player_controller.dart';
 import 'screens/auth_screen.dart';
 import 'screens/main_menu_screen.dart';
@@ -68,10 +69,36 @@ class _AuthGateState extends State<_AuthGate> {
     super.dispose();
   }
 
+  String? _referralAppliedUid;
+
   void _onAuthChanged() {
     final AppUser? user = AuthService.instance.currentAppUser;
     _maybeSync(user);
+    _maybeApplyReferral(user);
     if (mounted) setState(() => _user = user);
+  }
+
+  /// Once a player is fully signed in and (if needed) email-verified, set up
+  /// their invite code and credit any pending referral exactly once.
+  Future<void> _maybeApplyReferral(AppUser? user) async {
+    if (user == null || user.isLocal) return;
+    if (AuthService.instance.needsEmailVerification) return;
+    if (_referralAppliedUid == user.uid) return;
+    _referralAppliedUid = user.uid;
+
+    final PlayerController player = context.read<PlayerController>();
+    await ReferralService.instance.ensureMyCode(user.uid);
+    final int bonus =
+        await ReferralService.instance.applyPendingReferral(user.uid, player);
+    if (bonus > 0) {
+      await CloudSaveService.instance.push(player.data);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Welcome! +$bonus coins from your friend\'s invite 🎁'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    }
   }
 
   /// Pulls the cloud save once per signed-in Firebase user. Local-only accounts

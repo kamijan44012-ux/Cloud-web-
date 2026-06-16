@@ -7,7 +7,7 @@ import '../screens/profile_screen.dart';
 /// Small circular avatar button that opens the [ProfileScreen]. Reactively
 /// updates when the player changes their avatar.
 class ProfileAvatarButton extends StatelessWidget {
-  const ProfileAvatarButton({super.key, this.size = 38});
+  const ProfileAvatarButton({super.key, this.size = 56});
   final double size;
 
   @override

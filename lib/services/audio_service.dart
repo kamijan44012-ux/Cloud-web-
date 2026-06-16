@@ -18,7 +18,7 @@ class AudioService {
   bool _cached = false;
 
   static const List<String> _sfx = <String>[
-    'laser.mp3',
+    'laser.wav',
     'explosion.mp3',
     'hit.wav',
     'powerup.wav',
@@ -46,9 +46,9 @@ class AudioService {
     } catch (_) {/* fail soft */}
   }
 
-  void laser() => play('laser.mp3', volume: 0.35);
+  void laser() => play('laser.wav', volume: 0.4);
   void explosion() => play('explosion.mp3', volume: 0.6);
-  void hit() => play('hit.wav', volume: 0.4);
+  void hit() => play('hit.wav', volume: 0.55);
   void powerUp() => play('powerup.wav', volume: 0.6);
   void coin() => play('coin.wav', volume: 0.5);
   void bossRoar() => play('boss_roar.wav', volume: 0.7);

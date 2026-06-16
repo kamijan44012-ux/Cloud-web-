@@ -1,7 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../config/game_config.dart';
+import 'email_verification_service.dart';
 import 'firebase_service.dart';
 import 'local_auth_service.dart';
 
@@ -52,6 +54,10 @@ class AuthService {
 
   User? _firebaseUser;
 
+  /// Set once a password user has confirmed their 6-digit email code (EmailJS
+  /// flow). Mirrored to `user_profiles/{uid}.emailCodeVerified`.
+  bool _emailCodeVerified = false;
+
   /// True when Firebase Auth is actually usable (initialised with real config).
   bool get _firebaseReady =>
       GameConfig.enableFirebase && FirebaseService.instance.isReady;
@@ -77,17 +83,44 @@ class AuthService {
   /// uses on-device email accounts and Google sign-in is unavailable.
   bool get isCloudEnabled => _firebaseReady;
 
+  /// True when this build emails a 6-digit code (EmailJS configured) rather
+  /// than a Firebase verification link.
+  bool get usesEmailCode => EmailVerificationService.instance.usesCode;
+
   /// True when the signed-in user registered with email/password and has not yet
   /// confirmed their email. Google and guest accounts never need verification.
   bool get needsEmailVerification {
     final AppUser? u = userNotifier.value;
     if (u == null || u.isLocal) return false;
-    return u.isPasswordProvider && !u.emailVerified;
+    if (!u.isPasswordProvider) return false;
+    if (u.emailVerified) return false; // already verified via Firebase link
+    if (usesEmailCode) return !_emailCodeVerified;
+    return true; // link flow, not yet clicked
   }
 
-  /// Re-sends the verification email to the current user.
+  Future<void> _loadEmailCodeVerified(String uid) async {
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> snap =
+          await FirebaseFirestore.instance
+              .collection('user_profiles')
+              .doc(uid)
+              .get();
+      _emailCodeVerified =
+          (snap.data()?['emailCodeVerified'] as bool?) ?? false;
+    } catch (e) {
+      debugPrint('_loadEmailCodeVerified: $e');
+      _emailCodeVerified = false;
+    }
+  }
+
+  /// Re-sends the verification code (EmailJS) or link (Firebase) to the user.
   Future<String?> resendVerificationEmail() async {
     if (!_firebaseReady) return 'Online server not available.';
+    if (usesEmailCode) {
+      final String? email = currentEmail;
+      if (email == null) return 'No email on file.';
+      return EmailVerificationService.instance.sendCode(email);
+    }
     try {
       await FirebaseAuth.instance.currentUser?.sendEmailVerification();
       return null;
@@ -96,6 +129,29 @@ class AuthService {
     } catch (e) {
       return 'Could not send the email. Please try again.';
     }
+  }
+
+  /// Checks a 6-digit code the player typed in. On success marks them verified
+  /// (locally + in their cloud profile) and refreshes the gate.
+  Future<String?> confirmEmailCode(String input) async {
+    if (!EmailVerificationService.instance.verify(input)) {
+      return 'Incorrect or expired code. Please check and try again.';
+    }
+    _emailCodeVerified = true;
+    try {
+      final String? uid = _firebaseUser?.uid;
+      if (uid != null) {
+        await FirebaseFirestore.instance
+            .collection('user_profiles')
+            .doc(uid)
+            .set(<String, dynamic>{'emailCodeVerified': true},
+                SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint('confirmEmailCode persist: $e');
+    }
+    _recompute();
+    return null;
   }
 
   /// Reloads the Firebase user and refreshes state — call after the player says
@@ -151,8 +207,18 @@ class AuthService {
             await auth.getRedirectResult();
           } catch (_) {}
         }
-        auth.authStateChanges().listen((User? user) {
+        auth.authStateChanges().listen((User? user) async {
           _firebaseUser = user;
+          // For unverified email/password accounts, load whether they already
+          // confirmed via the 6-digit code on a previous session.
+          if (user != null &&
+              !user.emailVerified &&
+              user.providerData
+                  .any((UserInfo p) => p.providerId == 'password')) {
+            await _loadEmailCodeVerified(user.uid);
+          } else {
+            _emailCodeVerified = false;
+          }
           _recompute();
         });
       } catch (e) {
@@ -206,11 +272,17 @@ class AuthService {
           password: password,
         );
         await cred.user?.updateDisplayName(displayName.trim());
-        // Send the verification email so first-time users confirm ownership.
+        _emailCodeVerified = false;
+        // First-time users confirm ownership: a 6-digit code (EmailJS) when
+        // configured, otherwise Firebase's verification link.
         try {
-          await cred.user?.sendEmailVerification();
+          if (usesEmailCode) {
+            await EmailVerificationService.instance.sendCode(email.trim());
+          } else {
+            await cred.user?.sendEmailVerification();
+          }
         } catch (e) {
-          debugPrint('sendEmailVerification on signup: $e');
+          debugPrint('send verification on signup: $e');
         }
         await cred.user?.reload();
         _firebaseUser = FirebaseAuth.instance.currentUser;
@@ -327,6 +399,8 @@ class AuthService {
     }
     await LocalAuthService.instance.signOut();
     _firebaseUser = null;
+    _emailCodeVerified = false;
+    EmailVerificationService.instance.clear();
     _recompute();
   }
 

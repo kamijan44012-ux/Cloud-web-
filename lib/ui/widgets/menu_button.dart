@@ -35,7 +35,7 @@ class MenuButton extends StatelessWidget {
             : null,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 22),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: <Color>[color, color.withOpacity(0.6)],
@@ -50,7 +50,7 @@ class MenuButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               if (icon != null) ...<Widget>[
-                Icon(icon, color: Colors.white),
+                Icon(icon, color: Colors.white, size: 28),
                 const SizedBox(width: 12),
               ],
               Column(
@@ -59,13 +59,13 @@ class MenuButton extends StatelessWidget {
                   Text(
                     label,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 21,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
                     ),
                   ),
                   if (subtitle != null)
-                    Text(subtitle!, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.8))),
+                    Text(subtitle!, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.85))),
                 ],
               ),
             ],

@@ -9,6 +9,7 @@ import 'services/auth_service.dart';
 import 'services/firebase_service.dart';
 import 'services/iap_service.dart';
 import 'services/profile_service.dart';
+import 'services/referral_service.dart';
 import 'systems/achievement_system.dart';
 import 'systems/battle_pass.dart';
 import 'systems/mission_system.dart';
@@ -42,6 +43,15 @@ Future<void> main() async {
 
   // Load the locally-saved avatar/profile preference.
   await ProfileService.instance.load();
+
+  // Capture an invite code from the URL (#ref=CODE) before the UI renders.
+  try {
+    final String fragment = Uri.base.fragment;
+    if (fragment.startsWith('ref=')) {
+      ReferralService.instance.pendingRefCode =
+          fragment.substring(4).trim().toUpperCase();
+    }
+  } catch (_) {}
 
   // Non-blocking background services.
   _initBackgroundServices(player);
