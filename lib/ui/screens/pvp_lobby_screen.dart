@@ -32,7 +32,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
   _CreateState _createState = _CreateState.idle;
   String? _createError;
   StreamSubscription<PvpRoom?>? _waitSub;
-  int _wager = 50;
+  int _wager = 0;
 
   // Join-tab state
   final TextEditingController _codeCtrl = TextEditingController();
@@ -567,7 +567,6 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
     }
 
     // Idle — wager picker then create button
-    final bool canAfford = player.coins >= _wager;
     return _centeredPad(Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -586,45 +585,51 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
           style: TextStyle(color: Colors.white38, fontSize: 13),
         ),
         const SizedBox(height: 20),
-        // Wager chips
+        // Wager chips — 0 = FREE
         Wrap(
-          spacing: 12,
+          spacing: 10,
           runSpacing: 10,
           alignment: WrapAlignment.center,
-          children: <int>[10, 25, 50, 100].map((int w) {
+          children: <int>[0, 10, 50, 100].map((int w) {
             final bool selected = _wager == w;
+            final bool affordable = player.coins >= w;
             return GestureDetector(
-              onTap: () => setState(() => _wager = w),
+              onTap: affordable ? () => setState(() => _wager = w) : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 12),
+                    horizontal: 18, vertical: 12),
                 decoration: BoxDecoration(
                   color: selected
                       ? Palette.hudYellow.withOpacity(0.22)
                       : Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color:
-                        selected ? Palette.hudYellow : Colors.white24,
+                    color: selected
+                        ? Palette.hudYellow
+                        : (affordable ? Colors.white24 : Colors.white10),
                     width: selected ? 2 : 1,
                   ),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.monetization_on,
-                        color: selected ? Palette.coin : Colors.white38,
-                        size: 22),
+                    Icon(
+                      w == 0 ? Icons.lock_open : Icons.monetization_on,
+                      color: selected
+                          ? Palette.coin
+                          : (affordable ? Colors.white38 : Colors.white12),
+                      size: 22,
+                    ),
                     const SizedBox(height: 4),
                     Text(
-                      '$w',
+                      w == 0 ? 'FREE' : '$w',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900,
                         color: selected
                             ? Palette.hudYellow
-                            : Colors.white60,
+                            : (affordable ? Colors.white60 : Colors.white24),
                       ),
                     ),
                   ],
@@ -635,26 +640,20 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
         ),
         const SizedBox(height: 10),
         Text(
-          'Prize pool: ${_wager * 2} coins',
+          _wager == 0
+              ? 'Free match — winner gets 100 coins'
+              : 'Prize pool: ${_wager * 2} coins',
           style: const TextStyle(
               color: Palette.coin,
               fontSize: 14,
               fontWeight: FontWeight.w600),
         ),
-        if (!canAfford) ...<Widget>[
-          const SizedBox(height: 6),
-          Text(
-            'You only have ${player.coins} coins!',
-            style:
-                const TextStyle(color: Colors.redAccent, fontSize: 13),
-          ),
-        ],
         const SizedBox(height: 28),
         _btn(
           label: 'Create Match',
           icon: Icons.add_circle_outline,
-          color: canAfford ? Palette.hudGreen : Colors.grey.shade700,
-          onTap: canAfford ? () => _createRoom(player) : () {},
+          color: Palette.hudGreen,
+          onTap: () => _createRoom(player),
         ),
       ],
     ));
