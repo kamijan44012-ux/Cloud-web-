@@ -1,13 +1,12 @@
-import 'package:flutter/foundation.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../config/game_config.dart';
 import '../models/player_data.dart';
+import 'auth_service.dart';
 
-/// Cloud save + anonymous auth. Signs the player in anonymously (upgradeable to
-/// Google later), then reads/writes their PlayerData document in Firestore.
+/// Cloud save backed by Firestore. Auth is handled by [AuthService]; this
+/// service just reads/writes the player's save doc and user profile.
 /// Conflict resolution is last-write-wins by `lastSyncedMs`.
 class CloudSaveService {
   CloudSaveService._();
@@ -16,18 +15,60 @@ class CloudSaveService {
   String? _uid;
   String? get uid => _uid;
 
-  Future<void> signInAnonymously() async {
+  DocumentReference<Map<String, dynamic>>? get _doc =>
+      _uid == null
+          ? null
+          : FirebaseFirestore.instance.collection('saves').doc(_uid);
+
+  /// Called after a successful Firebase Auth sign-in.
+  Future<void> setUser(
+    String uid, {
+    String? email,
+    String? displayName,
+  }) async {
     if (!GameConfig.enableFirebase) return;
+    _uid = uid;
     try {
-      final UserCredential cred = await FirebaseAuth.instance.signInAnonymously();
-      _uid = cred.user?.uid;
+      // Store/update the user profile so admin can look up by email.
+      await FirebaseFirestore.instance
+          .collection('user_profiles')
+          .doc(uid)
+          .set(
+        <String, dynamic>{
+          'uid': uid,
+          'email': (email ?? '').toLowerCase(),
+          'displayName': displayName ?? 'Player',
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      // Ensure admin account has the initial 2 M coins on first login.
+      if (email?.toLowerCase() == AuthService.adminEmail.toLowerCase()) {
+        final DocumentSnapshot<Map<String, dynamic>> snap =
+            await FirebaseFirestore.instance
+                .collection('saves')
+                .doc(uid)
+                .get();
+        final int existing =
+            (snap.data()?['coins'] as num?)?.toInt() ?? 0;
+        if (!snap.exists || existing < AuthService.adminInitialCoins) {
+          await FirebaseFirestore.instance
+              .collection('saves')
+              .doc(uid)
+              .set(
+            <String, dynamic>{
+              'coins': AuthService.adminInitialCoins,
+              'lastSyncedMs': DateTime.now().millisecondsSinceEpoch,
+            },
+            SetOptions(merge: true),
+          );
+        }
+      }
     } catch (e) {
-      debugPrint('Anonymous sign-in failed: $e');
+      debugPrint('CloudSaveService.setUser: $e');
     }
   }
-
-  DocumentReference<Map<String, dynamic>>? get _doc =>
-      _uid == null ? null : FirebaseFirestore.instance.collection('saves').doc(_uid);
 
   Future<PlayerData?> pull() async {
     if (_doc == null) return null;
