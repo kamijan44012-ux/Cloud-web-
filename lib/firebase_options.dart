@@ -1,6 +1,7 @@
-// Stub Firebase options — real values are injected at CI build time from
-// GitHub Secrets (FIREBASE_API_KEY, FIREBASE_APP_ID, etc.).
-// Without secrets the app runs offline; PvP rooms require Firebase Firestore.
+// Firebase web/app configuration for project "chicken-hunter-35042".
+// These web config values are public client identifiers (safe to commit) —
+// Firebase secures data via Authentication + Firestore Security Rules, not by
+// hiding these keys. If GitHub secrets are set, CI overwrites this at build.
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
@@ -12,21 +13,20 @@ class DefaultFirebaseOptions {
     throw UnsupportedError('Unsupported platform for Firebase');
   }
 
-  // Values filled by CI; empty strings cause Firebase to fail-soft.
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: '',
-    appId: '',
-    messagingSenderId: '',
-    projectId: '',
-    authDomain: '',
-    storageBucket: '',
+    apiKey: 'AIzaSyB_ph8U__xfnl9djASO4Wq9ZVKMr6oEk5I',
+    appId: '1:880315665778:web:2d3e41488e3465d43f21eb',
+    messagingSenderId: '880315665778',
+    projectId: 'chicken-hunter-35042',
+    authDomain: 'chicken-hunter-35042.firebaseapp.com',
+    storageBucket: 'chicken-hunter-35042.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: '',
-    appId: '',
-    messagingSenderId: '',
-    projectId: '',
-    storageBucket: '',
+    apiKey: 'AIzaSyB_ph8U__xfnl9djASO4Wq9ZVKMr6oEk5I',
+    appId: '1:880315665778:web:2d3e41488e3465d43f21eb',
+    messagingSenderId: '880315665778',
+    projectId: 'chicken-hunter-35042',
+    storageBucket: 'chicken-hunter-35042.firebasestorage.app',
   );
 }
