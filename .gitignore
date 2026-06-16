@@ -26,7 +26,7 @@ ios/Flutter/Flutter.framework
 ios/Runner/GoogleService-Info.plist
 
 # Secrets / generated Firebase config
-lib/firebase_options.dart
+# lib/firebase_options.dart  # now committed as a stub; real values injected via CI secrets
 
 # Misc
 .DS_Store
