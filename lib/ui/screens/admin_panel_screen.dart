@@ -209,7 +209,7 @@ class _RequestCardState extends State<_RequestCard> {
       requestId: widget.request.id,
       targetUid: widget.request.uid,
       coinsToSend: amount,
-      adminUid: AuthService.instance.currentUser!.uid,
+      adminUid: AuthService.instance.currentUid ?? "",
     );
     if (!mounted) return;
     setState(() => _processing = false);
@@ -467,7 +467,7 @@ class _SendTabState extends State<_SendTab> {
         await CoinRequestService.instance.sendCoinsToUser(
       targetUid: targetUid,
       amount: amt,
-      adminUid: AuthService.instance.currentUser!.uid,
+      adminUid: AuthService.instance.currentUid ?? "",
     );
     if (!mounted) return;
 
@@ -569,12 +569,12 @@ class _SendTabState extends State<_SendTab> {
           ),
           const SizedBox(height: 8),
           Text(
-            AuthService.instance.currentUser?.email ?? '—',
+            AuthService.instance.currentEmail ?? '—',
             style: const TextStyle(color: Colors.white70),
           ),
           const SizedBox(height: 4),
           Text(
-            'UID: ${AuthService.instance.currentUser?.uid ?? '—'}',
+            'UID: ${AuthService.instance.currentUid ?? '—'}',
             style: const TextStyle(color: Colors.white30, fontSize: 11),
           ),
           const SizedBox(height: 24),

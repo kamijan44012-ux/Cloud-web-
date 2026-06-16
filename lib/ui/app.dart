@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -50,62 +49,51 @@ class _AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<_AuthGate> {
-  bool _initialized = false;
-  User? _user;
+  AppUser? _user;
+  String? _syncedUid;
 
   @override
   void initState() {
     super.initState();
-
-    // If Firebase isn't ready (stub config, no network), skip auth.
-    if (!GameConfig.enableFirebase) {
-      _initialized = true;
-      return;
-    }
-
-    try {
-      AuthService.instance.authStateChanges.listen(_onAuthChanged);
-    } catch (_) {
-      // Firebase not initialized — offline mode
-      setState(() => _initialized = true);
-    }
+    AuthService.instance.userNotifier.addListener(_onAuthChanged);
+    _user = AuthService.instance.currentAppUser;
+    _maybeSync(_user);
   }
 
-  Future<void> _onAuthChanged(User? user) async {
-    if (user != null && (_user == null || _user!.uid != user.uid)) {
-      final PlayerController player =
-          // ignore: use_build_context_synchronously
-          context.read<PlayerController>();
-      await CloudSaveService.instance.setUser(
-        user.uid,
-        email: user.email,
-        displayName: user.displayName,
-      );
-      final PlayerData? cloud = await CloudSaveService.instance.pull();
-      if (cloud != null) player.mergeFromCloud(cloud);
-    }
-    if (mounted) {
-      setState(() {
-        _user = user;
-        _initialized = true;
-      });
-    }
+  @override
+  void dispose() {
+    AuthService.instance.userNotifier.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    final AppUser? user = AuthService.instance.currentAppUser;
+    _maybeSync(user);
+    if (mounted) setState(() => _user = user);
+  }
+
+  /// Pulls the cloud save once per signed-in Firebase user. Local-only accounts
+  /// have no cloud document, so they just play with their on-device save.
+  Future<void> _maybeSync(AppUser? user) async {
+    if (user == null || user.isLocal) return;
+    if (_syncedUid == user.uid) return;
+    _syncedUid = user.uid;
+
+    final PlayerController player = context.read<PlayerController>();
+    await CloudSaveService.instance.setUser(
+      user.uid,
+      email: user.email,
+      displayName: user.displayName,
+    );
+    final PlayerData? cloud = await CloudSaveService.instance.pull();
+    if (cloud != null) player.mergeFromCloud(cloud);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_initialized) {
-      return const Scaffold(
-        backgroundColor: Palette.spaceTop,
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    // Offline mode (Firebase not configured) or signed-in user
-    if (!GameConfig.enableFirebase || _user != null) {
+    if (_user != null) {
       return const _HomeBootstrap();
     }
-
     return const AuthScreen();
   }
 }

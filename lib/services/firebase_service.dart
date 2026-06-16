@@ -25,12 +25,21 @@ class FirebaseService {
     try {
       await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform);
-      _analytics = FirebaseAnalytics.instance;
-      await _initRemoteConfig();
+      // Core is up: Auth and Firestore are usable from here on. This is the
+      // signal AuthService uses to decide between Firebase and local fallback.
       _ready = true;
+      _analytics = FirebaseAnalytics.instance;
     } catch (e) {
-      // Fails if Firebase secrets not added to GitHub. App runs offline.
+      // Fails if Firebase secrets not added to GitHub. App runs offline and
+      // AuthService falls back to on-device accounts.
       debugPrint('Firebase init skipped: $e');
+      return;
+    }
+    // Remote Config is optional live-ops tuning; never let it block auth.
+    try {
+      await _initRemoteConfig();
+    } catch (e) {
+      debugPrint('Remote Config skipped: $e');
     }
   }
 

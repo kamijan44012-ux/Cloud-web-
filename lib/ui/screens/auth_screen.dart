@@ -74,6 +74,26 @@ class _AuthScreenState extends State<AuthScreen>
                   dividerColor: Colors.transparent,
                 ),
               ),
+              if (!AuthService.instance.isCloudEnabled)
+                Container(
+                  margin:
+                      const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Palette.hudYellow.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: Palette.hudYellow.withOpacity(0.4)),
+                  ),
+                  child: const Text(
+                    'Offline mode: sign up with your email to play. '
+                    'Google sign-in turns on once the server is connected.',
+                    style: TextStyle(
+                        color: Palette.hudYellow, fontSize: 11.5),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               const SizedBox(height: 12),
               Expanded(
                 child: TabBarView(
