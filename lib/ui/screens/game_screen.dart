@@ -52,6 +52,7 @@ class _GameScreenState extends State<GameScreen> {
       body: Stack(
         children: <Widget>[
           GameWidget<ChickenHunterGame>(game: _game),
+          _warpBanner(),
           _topHud(),
           _buffChips(),
           _ultimateButton(),
@@ -64,50 +65,146 @@ class _GameScreenState extends State<GameScreen> {
   Widget _topHud() {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
+            // Pause + compact health, stacked on the left.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                IconButton(
-                  onPressed: () {
+                GestureDetector(
+                  onTap: () {
                     _game.pause();
                     _showPause();
                   },
-                  icon: const Icon(Icons.pause_circle, size: 32, color: Colors.white),
-                ),
-                const Spacer(),
-                ValueListenableBuilder<int>(
-                  valueListenable: _game.score,
-                  builder: (_, int s, __) => Text(
-                    'SCORE  $s',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.35),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Icon(Icons.pause, size: 20, color: Colors.white),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(height: 8),
+                _healthBar(),
+              ],
+            ),
+            const Spacer(),
+            // Score + wave, compact pills on the right.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                ValueListenableBuilder<int>(
+                  valueListenable: _game.score,
+                  builder: (_, int s, __) => _badge('$s', Colors.black.withOpacity(0.4),
+                      icon: Icons.star, iconColor: Palette.hudYellow),
+                ),
+                const SizedBox(height: 6),
                 ValueListenableBuilder<int>(
                   valueListenable: _game.wave,
-                  builder: (_, int w, __) => _badge('WAVE $w', Palette.nebulaPink),
+                  builder: (_, int w, __) => _badge('WAVE $w', Palette.nebulaPink.withOpacity(0.85)),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Health bar.
-            ValueListenableBuilder<double>(
-              valueListenable: _game.healthFraction,
-              builder: (_, double hp, __) => ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  value: hp,
-                  minHeight: 12,
-                  backgroundColor: Colors.black54,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    hp > 0.3 ? Palette.hudGreen : Palette.hudRed,
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Compact, modern health capsule: heart icon + slim gradient bar + percent.
+  Widget _healthBar() {
+    return ValueListenableBuilder<double>(
+      valueListenable: _game.healthFraction,
+      builder: (_, double hp, __) {
+        final Color fill = hp > 0.5
+            ? Palette.hudGreen
+            : (hp > 0.25 ? Palette.hudYellow : Palette.hudRed);
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.38),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.15)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.favorite, color: fill, size: 15),
+              const SizedBox(width: 6),
+              Stack(
+                alignment: Alignment.centerLeft,
+                children: <Widget>[
+                  Container(
+                    width: 96,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: Colors.white12,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 96 * hp.clamp(0.0, 1.0),
+                    height: 7,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: <Color>[fill.withOpacity(0.7), fill],
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                      boxShadow: <BoxShadow>[BoxShadow(color: fill.withOpacity(0.6), blurRadius: 5)],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 32,
+                child: Text('${(hp * 100).round()}%',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Big centered banner shown during warps / boss intros.
+  Widget _warpBanner() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 70),
+          child: ValueListenableBuilder<String>(
+            valueListenable: _game.banner,
+            builder: (_, String text, __) => AnimatedOpacity(
+              opacity: text.isEmpty ? 0 : 1,
+              duration: const Duration(milliseconds: 250),
+              child: Center(
+                child: Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                    shadows: <Shadow>[
+                      const Shadow(color: Palette.hudBlue, blurRadius: 18),
+                      Shadow(color: Colors.black.withOpacity(0.6), blurRadius: 4),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -183,10 +280,23 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  Widget _badge(String text, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
-        child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
+  Widget _badge(String text, Color color, {IconData? icon, Color? iconColor}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withOpacity(0.15)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (icon != null) ...<Widget>[
+              Icon(icon, size: 14, color: iconColor ?? Colors.white),
+              const SizedBox(width: 4),
+            ],
+            Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
+        ),
       );
 
   void _showPause() {

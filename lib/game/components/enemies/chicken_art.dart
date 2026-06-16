@@ -17,6 +17,13 @@ class ChickenArt {
     return hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0)).toColor();
   }
 
+  /// Rotates the hue so each wave-tier has a visibly different colour of chicken.
+  static Color _hueShift(Color base, int variant) {
+    if (variant == 0) return base;
+    final HSLColor hsl = HSLColor.fromColor(base);
+    return hsl.withHue((hsl.hue + variant * 47) % 360).toColor();
+  }
+
   static void draw(
     Canvas canvas, {
     required Offset center,
@@ -27,10 +34,12 @@ class ChickenArt {
     required double bob,
     required bool blink,
     required bool flash,
+    int variant = 0,
   }) {
     final double r = radius;
-    final Color body = flash ? Colors.white : bodyColor;
-    final Color dark = _shade(bodyColor, -0.18);
+    final Color tinted = _hueShift(bodyColor, variant);
+    final Color body = flash ? Colors.white : tinted;
+    final Color dark = _shade(tinted, -0.18);
     final double flap = sin(wing) * 0.6; // wing rotation
 
     canvas.save();
@@ -74,6 +83,14 @@ class ChickenArt {
       Rect.fromCenter(center: Offset(0, r * 0.25), width: r * 0.9, height: r * 0.8),
       Paint()..color = _shade(body, 0.18).withOpacity(0.6),
     );
+
+    // Wave-variety pattern (spots / stripes), clipped to the body.
+    if (!flash && variant > 0) {
+      canvas.save();
+      canvas.clipPath(Path()..addOval(bodyRect));
+      _pattern(canvas, r, dark, variant);
+      canvas.restore();
+    }
 
     // --- Comb (red zigzag on top) ---
     final Paint comb = Paint()..color = Palette.comb;
@@ -119,6 +136,31 @@ class ChickenArt {
     }
 
     canvas.restore();
+  }
+
+  static void _pattern(Canvas canvas, double r, Color color, int variant) {
+    final Paint p = Paint()..color = color.withOpacity(0.5);
+    switch (variant % 3) {
+      case 1: // spots
+        for (final List<double> o in <List<double>>[
+          <double>[-0.4, -0.2],
+          <double>[0.35, 0.0],
+          <double>[-0.1, 0.4],
+          <double>[0.45, 0.45],
+          <double>[-0.5, 0.3],
+        ]) {
+          canvas.drawCircle(Offset(o[0] * r, o[1] * r), r * 0.14, p);
+        }
+        break;
+      case 2: // stripes
+        final Paint sp = Paint()
+          ..color = color.withOpacity(0.45)
+          ..strokeWidth = r * 0.16;
+        for (double y = -r; y < r; y += r * 0.42) {
+          canvas.drawLine(Offset(-r, y), Offset(r, y + r * 0.2), sp);
+        }
+        break;
+    }
   }
 
   static void _wing(Canvas canvas, double r, Color color, {required int side, required double flap}) {

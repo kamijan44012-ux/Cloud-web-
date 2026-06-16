@@ -25,11 +25,12 @@ import 'chicken_art.dart';
 ///  - kamikaze: accelerates toward the player to ram them, fuse sparking.
 class EnemyChicken extends PositionComponent
     with CollisionCallbacks, HasGameReference<ChickenHunterGame> {
-  EnemyChicken({required Vector2 position, required this.stats})
+  EnemyChicken({required Vector2 position, required this.stats, this.variant = 0})
       : health = stats.maxHealth,
         super(position: position, anchor: Anchor.center, size: Vector2.all(stats.radius * 2));
 
   final EnemyStats stats;
+  final int variant; // wave-tier skin variation
   double health;
 
   final Random _rng = Random();
@@ -158,6 +159,15 @@ class EnemyChicken extends PositionComponent
       _die();
       return true;
     }
+    // Small spark burst on a non-lethal hit.
+    game.add(Explosion(
+      position: position + Vector2(0, -stats.radius * 0.5),
+      color: Colors.white,
+      particleCount: 6,
+      maxRadius: stats.radius * 0.45,
+      lifetime: 0.22,
+      shockwave: false,
+    ));
     return false;
   }
 
@@ -197,6 +207,7 @@ class EnemyChicken extends PositionComponent
       bob: sin(_phase * 3),
       blink: _blink > 0,
       flash: _hitFlash > 0,
+      variant: variant,
     );
     canvas.restore();
 

@@ -20,8 +20,10 @@ import '../systems/player_controller.dart';
 import 'components/bullets/bullet.dart';
 import 'components/effects/explosion.dart';
 import 'components/effects/floating_text.dart';
+import 'components/effects/hyperspace.dart';
 import 'components/enemies/boss_chicken.dart';
 import 'components/enemies/enemy_chicken.dart';
+import 'components/planet.dart';
 import 'components/player_ship.dart';
 import 'components/powerups/power_up.dart';
 import 'components/star_field.dart';
@@ -73,6 +75,15 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
   int _powerUpsThisRun = 0;
   double _waveBanner = 0;
 
+  // Inter-wave hyperjump transition.
+  double _transition = 0;
+  bool _pendingWave = false;
+  double _planetTimer = 12;
+  final ValueNotifier<String> banner = ValueNotifier<String>('');
+
+  /// Every 3 waves the chickens get a fresh "skin" (hue + pattern).
+  int get _variant => _waves.wave ~/ 3;
+
   // Snapshot of loadout taken at run start (so mid-run upgrades don't apply).
   late WeaponType equippedWeapon;
   late int weaponLevel;
@@ -111,11 +122,30 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     final double maxHealth = _shipData.baseHealth * healthBonus;
 
     add(StarField(areaSize: size));
+    _spawnPlanet(initial: true); // a world already hanging in the sky
     _ship = PlayerShip(ship: _shipData, maxHealth: maxHealth);
     add(_ship);
 
     AudioService.instance.startMusic();
     _beginNextWave();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background celestial bodies drifting past for depth.
+  // ---------------------------------------------------------------------------
+  void _spawnPlanet({bool initial = false, bool fromTop = false}) {
+    final PlanetKind kind = PlanetKind.values[_rng.nextInt(PlanetKind.values.length)];
+    final double r = 50 + _rng.nextDouble() * 70;
+    final double x = _rng.nextDouble() * size.x;
+    final double y = initial
+        ? size.y * (0.15 + _rng.nextDouble() * 0.3)
+        : (fromTop ? -r * 1.5 : -r * 1.5);
+    add(Planet(
+      position: Vector2(x, y),
+      kind: kind,
+      planetRadius: r,
+      driftSpeed: fromTop ? 60 : 10 + _rng.nextDouble() * 14,
+    ));
   }
 
   // ---------------------------------------------------------------------------
@@ -143,16 +173,37 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
 
     buffs.tick(dt);
     activeBuffs.value = buffs.active;
-    if (_waveBanner > 0) _waveBanner -= dt;
+    if (_waveBanner > 0) {
+      _waveBanner -= dt;
+      if (_waveBanner <= 0 && _transition <= 0) banner.value = '';
+    }
     if (_shake > 0) _shake = max(0, _shake - dt * 45);
+
+    // Occasionally drift a new planet/galaxy in from the top.
+    _planetTimer -= dt;
+    if (_planetTimer <= 0) {
+      _planetTimer = 10 + _rng.nextDouble() * 12;
+      _spawnPlanet();
+    }
+
+    // During a hyperjump, hold spawning until the warp completes.
+    if (_transition > 0) {
+      _transition -= dt;
+      if (_transition <= 0 && _pendingWave) {
+        _pendingWave = false;
+        banner.value = '';
+        _beginNextWave();
+      }
+      return;
+    }
 
     // Stream in normal-wave enemies.
     final EnemyType? toSpawn = _waves.tick(dt);
     if (toSpawn != null) _spawnEnemy(toSpawn);
 
-    // Advance to the next wave once the field is clear.
+    // When the field is clear, warp to the next sector (wave).
     if (_waves.waveCleared && children.whereType<EnemyChicken>().isEmpty) {
-      _beginNextWave();
+      _startHyperjump();
     }
 
     if (buffs.magnet) _applyMagnet(dt);
@@ -160,10 +211,23 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     healthFraction.value = (_ship.health / _ship.maxHealth).clamp(0.0, 1.0);
   }
 
+  /// Plays the interplanetary warp: streaking stars, a destination planet flying
+  /// in, and a "SECTOR N" banner, then starts the next wave.
+  void _startHyperjump() {
+    _pendingWave = true;
+    _transition = 1.4;
+    add(Hyperspace());
+    _spawnPlanet(fromTop: true); // the planet we're arriving at
+    AudioService.instance.nuke(); // reuse as a low warp whoosh
+    shake(8);
+    banner.value = 'WARP → SECTOR ${_waves.wave + 1}';
+  }
+
   void _beginNextWave() {
     final EnemyType? boss = _waves.startNextWave();
     wave.value = _waves.wave;
     _waveBanner = 2.0;
+    if (boss != null) banner.value = _waves.isGiantBossWave ? 'GALACTIC BOSS!' : 'BOSS INCOMING!';
     missions.report(MissionMetric.reachWave, _waves.wave);
     for (final String _ in achievements.reportWave(_waves.wave)) {/* toast handled by UI */}
 
@@ -183,6 +247,7 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     add(EnemyChicken(
       position: Vector2(x, -40),
       stats: EnemyStats.table[type]!.scaledFor(_waves.wave),
+      variant: _variant,
     ));
   }
 
@@ -190,6 +255,7 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     add(EnemyChicken(
       position: from + Vector2(_rng.nextDouble() * 60 - 30, 40),
       stats: EnemyStats.table[EnemyType.fast]!.scaledFor(_waves.wave),
+      variant: _variant,
     ));
   }
 

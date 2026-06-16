@@ -56,7 +56,7 @@ class WeaponData {
       name: 'Pulse Laser',
       description: 'Reliable rapid-fire starter laser.',
       color: Palette.hudGreen,
-      baseDamage: 10,
+      baseDamage: 12,
       baseFireInterval: 0.30,
       projectileSpeed: 620,
       maxLevel: 20,

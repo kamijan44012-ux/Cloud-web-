@@ -44,15 +44,17 @@ class EnemyStats {
   final bool isBoss;
 
   /// Returns a copy with health/damage/reward scaled up for deeper waves so the
-  /// game keeps getting harder (and more rewarding) without new content.
+  /// game keeps getting harder (and more rewarding) without new content. Wave 1
+  /// uses the base stats unchanged so the opening is gentle (1–2 hit kills).
   EnemyStats scaledFor(int wave) {
-    final double hpMul = 1 + wave * 0.12;
-    final double dmgMul = 1 + wave * 0.05;
-    final double rewardMul = 1 + wave * 0.08;
+    final int w = (wave - 1).clamp(0, 999); // wave 1 == base stats
+    final double hpMul = 1 + w * 0.10;
+    final double dmgMul = 1 + w * 0.04;
+    final double rewardMul = 1 + w * 0.08;
     return EnemyStats(
       type: type,
       maxHealth: maxHealth * hpMul,
-      speed: speed * (1 + wave * 0.01).clamp(1.0, 2.0),
+      speed: speed * (1 + w * 0.01).clamp(1.0, 2.0),
       contactDamage: contactDamage * dmgMul,
       coinReward: (coinReward * rewardMul).round(),
       xpReward: (xpReward * rewardMul).round(),
@@ -67,7 +69,7 @@ class EnemyStats {
   static const Map<EnemyType, EnemyStats> table = <EnemyType, EnemyStats>{
     EnemyType.normal: EnemyStats(
       type: EnemyType.normal,
-      maxHealth: 30,
+      maxHealth: 16, // dies in ~1–2 starter-laser hits on wave 1
       speed: 70,
       contactDamage: 10,
       coinReward: 5,
@@ -77,7 +79,7 @@ class EnemyStats {
     ),
     EnemyType.fast: EnemyStats(
       type: EnemyType.fast,
-      maxHealth: 18,
+      maxHealth: 10, // one-shot on wave 1
       speed: 160,
       contactDamage: 8,
       coinReward: 7,
@@ -87,7 +89,7 @@ class EnemyStats {
     ),
     EnemyType.armored: EnemyStats(
       type: EnemyType.armored,
-      maxHealth: 90,
+      maxHealth: 70,
       speed: 45,
       contactDamage: 16,
       coinReward: 14,
@@ -97,7 +99,7 @@ class EnemyStats {
     ),
     EnemyType.laser: EnemyStats(
       type: EnemyType.laser,
-      maxHealth: 45,
+      maxHealth: 36,
       speed: 55,
       contactDamage: 10,
       coinReward: 16,
@@ -109,7 +111,7 @@ class EnemyStats {
     ),
     EnemyType.kamikaze: EnemyStats(
       type: EnemyType.kamikaze,
-      maxHealth: 22,
+      maxHealth: 18,
       speed: 120,
       contactDamage: 28,
       coinReward: 12,
@@ -119,7 +121,7 @@ class EnemyStats {
     ),
     EnemyType.miniBoss: EnemyStats(
       type: EnemyType.miniBoss,
-      maxHealth: 600,
+      maxHealth: 500,
       speed: 40,
       contactDamage: 30,
       coinReward: 120,
@@ -132,7 +134,7 @@ class EnemyStats {
     ),
     EnemyType.galacticBoss: EnemyStats(
       type: EnemyType.galacticBoss,
-      maxHealth: 2400,
+      maxHealth: 2000,
       speed: 28,
       contactDamage: 45,
       coinReward: 500,
