@@ -10,6 +10,7 @@ import '../widgets/menu_button.dart';
 import '../widgets/space_background.dart';
 import 'game_screen.dart';
 import 'hangar_screen.dart';
+import 'pvp_lobby_screen.dart';
 import 'leaderboard_screen.dart';
 import 'missions_screen.dart';
 import 'settings_screen.dart';
@@ -101,6 +102,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     icon: Icons.play_arrow,
                     color: Palette.hudGreen,
                     onTap: () => _go(const GameScreen()),
+                  ),
+                  const SizedBox(height: 12),
+                  MenuButton(
+                    label: 'VS MODE',
+                    icon: Icons.people,
+                    color: Palette.hudRed,
+                    subtitle: '1v1 Online — Winner gets 100 coins',
+                    onTap: () => _go(const PvpLobbyScreen()),
                   ),
                   const SizedBox(height: 12),
                   Row(
