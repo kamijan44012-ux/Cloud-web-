@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'config/game_config.dart';
 import 'services/ads_service.dart';
 import 'services/audio_service.dart';
+import 'services/auth_service.dart';
 import 'services/firebase_service.dart';
 import 'services/iap_service.dart';
 import 'systems/achievement_system.dart';
@@ -33,6 +34,10 @@ Future<void> main() async {
   if (GameConfig.enableFirebase) {
     await FirebaseService.instance.init();
   }
+
+  // Wire up auth (Firebase when configured, on-device fallback otherwise) so
+  // every player can register and sign in, even without Firebase secrets.
+  await AuthService.instance.init();
 
   // Non-blocking background services.
   _initBackgroundServices(player);

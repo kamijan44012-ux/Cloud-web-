@@ -42,8 +42,15 @@ class _CoinRequestScreenState extends State<CoinRequestScreen> {
     }
 
     final AuthService auth = AuthService.instance;
-    if (!auth.isSignedIn) {
+    final AppUser? user = auth.currentAppUser;
+    if (user == null) {
       setState(() => _error = 'You must be logged in to request coins.');
+      return;
+    }
+    if (user.isLocal) {
+      setState(() => _error =
+          'Coin requests need the online server. Sign in once Google/cloud '
+          'sign-in is enabled.');
       return;
     }
 
@@ -53,10 +60,9 @@ class _CoinRequestScreenState extends State<CoinRequestScreen> {
     });
 
     final String? err = await CoinRequestService.instance.submitRequest(
-      uid: auth.currentUser!.uid,
-      email: auth.currentUser!.email ?? '',
-      displayName:
-          auth.currentUser!.displayName ?? auth.currentUser!.email ?? 'Player',
+      uid: user.uid,
+      email: user.email ?? '',
+      displayName: user.displayName ?? user.email ?? 'Player',
       amount: amt,
       message: _message.text.trim(),
     );
@@ -81,7 +87,7 @@ class _CoinRequestScreenState extends State<CoinRequestScreen> {
   @override
   Widget build(BuildContext context) {
     final int myCoins = context.watch<PlayerController>().coins;
-    final String uid = AuthService.instance.currentUser?.uid ?? '';
+    final String uid = AuthService.instance.currentUid ?? '';
 
     return Scaffold(
       body: SpaceBackground(

@@ -45,10 +45,33 @@ await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
 ## 6. Enable the products you use
 In the Firebase console:
-- **Authentication** → Sign-in method → enable **Anonymous**.
+- **Authentication** → Sign-in method → enable **Email/Password**.
+  - This is what the Register / Login screen uses. **If it is disabled, every
+    registration fails** with "Registration failed. Please try again."
+- **Authentication** → Sign-in method → enable **Google** (set a support email).
+  - Required for the "Continue with Google" button. Without it Google sign-in
+    fails and the app tells the player to use email instead.
+- **Authentication** → Settings → **Authorized domains** → add the domain the
+  game is served from, e.g. `kamijan44012-ux.github.io` (and `localhost` for
+  local testing). Google sign-in is rejected from unlisted domains.
 - **Firestore Database** → Create database (production mode).
-- **Remote Config** → add the keys from `assets/data/balance.json`.
+- **Remote Config** → add the keys from `assets/data/balance.json` (optional).
 - **Analytics** is on by default.
+
+> ### Why registration/Google currently fail on the live demo
+> The web build only talks to Firebase when the six `FIREBASE_*` GitHub secrets
+> are set (see `.github/workflows/deploy-web.yml`). Until they are, the app runs
+> in **offline mode**: email sign-up still works (accounts are stored on the
+> device) but Google sign-in and cross-device cloud save are unavailable.
+> To turn the cloud on:
+> 1. Add the secrets in **Repo → Settings → Secrets and variables → Actions**:
+>    `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`,
+>    `FIREBASE_PROJECT_ID`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`.
+>    The web API key is a public client identifier, not a secret — it is safe to
+>    expose in a client app.
+> 2. Enable **Email/Password** and **Google** providers (above).
+> 3. Add your `*.github.io` domain to **Authorized domains** (above).
+> 4. Re-run the **Deploy web to GitHub Pages** workflow.
 
 ## 7. Firestore security rules
 
