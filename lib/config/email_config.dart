@@ -13,9 +13,9 @@
 /// Until these are filled in, the app falls back to Firebase's email
 /// verification LINK so sign-up is never blocked.
 class EmailConfig {
-  static const String serviceId = '';
-  static const String templateId = '';
-  static const String publicKey = '';
+  static const String serviceId = 'service_0jvzak8';
+  static const String templateId = 'template_psblexe';
+  static const String publicKey = 'Kud_nj_c29c6R3q_0';
 
   /// Template variable names — change only if your EmailJS template differs.
   static const String varEmail = 'to_email';
