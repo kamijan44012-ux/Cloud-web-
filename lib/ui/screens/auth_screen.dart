@@ -74,26 +74,6 @@ class _AuthScreenState extends State<AuthScreen>
                   dividerColor: Colors.transparent,
                 ),
               ),
-              if (!AuthService.instance.isCloudEnabled)
-                Container(
-                  margin:
-                      const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Palette.hudYellow.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: Palette.hudYellow.withOpacity(0.4)),
-                  ),
-                  child: const Text(
-                    'Offline mode: sign up with your email to play. '
-                    'Google sign-in turns on once the server is connected.',
-                    style: TextStyle(
-                        color: Palette.hudYellow, fontSize: 11.5),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
               const SizedBox(height: 12),
               Expanded(
                 child: TabBarView(
@@ -104,6 +84,7 @@ class _AuthScreenState extends State<AuthScreen>
                   ],
                 ),
               ),
+              const _GuestPlaySection(),
             ],
           ),
         ),
@@ -267,7 +248,7 @@ class _LoginTabState extends State<_LoginTab> {
                     ),
             ),
           ),
-          if (!_forgotMode) ...<Widget>[
+          if (!_forgotMode && AuthService.instance.isCloudEnabled) ...<Widget>[
             const SizedBox(height: 16),
             const _OrDivider(),
             const SizedBox(height: 16),
@@ -417,10 +398,12 @@ class _RegisterTabState extends State<_RegisterTab> {
                     ),
             ),
           ),
-          const SizedBox(height: 16),
-          const _OrDivider(),
-          const SizedBox(height: 16),
-          _GoogleButton(onPressed: _loading ? null : _google),
+          if (AuthService.instance.isCloudEnabled) ...<Widget>[
+            const SizedBox(height: 16),
+            const _OrDivider(),
+            const SizedBox(height: 16),
+            _GoogleButton(onPressed: _loading ? null : _google),
+          ],
           const SizedBox(height: 20),
         ],
       ),
@@ -431,6 +414,104 @@ class _RegisterTabState extends State<_RegisterTab> {
 // ---------------------------------------------------------------------------
 // Shared widgets
 // ---------------------------------------------------------------------------
+
+/// Persistent bottom section: instant "Play as Guest" so anyone can jump in
+/// (and share with friends) without creating an account.
+class _GuestPlaySection extends StatefulWidget {
+  const _GuestPlaySection();
+
+  @override
+  State<_GuestPlaySection> createState() => _GuestPlaySectionState();
+}
+
+class _GuestPlaySectionState extends State<_GuestPlaySection> {
+  bool _loading = false;
+
+  Future<void> _playAsGuest() async {
+    final TextEditingController nameCtrl = TextEditingController();
+    final String? name = await showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          backgroundColor: Palette.spaceBottom,
+          title: const Text('Pick a name',
+              style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Player',
+              hintStyle: TextStyle(color: Colors.white38),
+            ),
+            onSubmitted: (String v) => Navigator.pop(ctx, v),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel',
+                  style: TextStyle(color: Colors.white60)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: Palette.nebulaPurple),
+              onPressed: () => Navigator.pop(ctx, nameCtrl.text),
+              child: const Text('Play'),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null) return; // cancelled
+    setState(() => _loading = true);
+    await AuthService.instance.signInAsGuest(name);
+    // The auth gate switches to the game automatically once signed in.
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const _OrDivider(),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _loading ? null : _playAsGuest,
+              icon: _loading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.rocket_launch,
+                      color: Palette.hudYellow, size: 20),
+              label: const Text('Play as Guest',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Palette.hudYellow),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'No account needed — jump in and share with friends.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _AuthField extends StatelessWidget {
   const _AuthField({
