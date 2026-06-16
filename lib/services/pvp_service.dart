@@ -39,6 +39,7 @@ class PvpService {
     required String uid,
     required String name,
     required String shipId,
+    required int wagerAmount,
   }) async {
     final WriteBatch batch = _db.batch();
 
@@ -51,6 +52,7 @@ class PvpService {
       'guestShipId': null,
       'status': 'waiting',
       'winner': null,
+      'wagerAmount': wagerAmount,
       'createdAt': FieldValue.serverTimestamp(),
     });
 

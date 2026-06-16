@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +14,10 @@ import '../widgets/space_background.dart';
 import 'pvp_game_screen.dart';
 
 class PvpLobbyScreen extends StatefulWidget {
-  const PvpLobbyScreen({super.key});
+  const PvpLobbyScreen({super.key, this.initialJoinCode});
+
+  /// When opened via a share link the room code arrives pre-filled.
+  final String? initialJoinCode;
 
   @override
   State<PvpLobbyScreen> createState() => _PvpLobbyScreenState();
@@ -28,6 +32,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
   _CreateState _createState = _CreateState.idle;
   String? _createError;
   StreamSubscription<PvpRoom?>? _waitSub;
+  int _wager = 50;
 
   // Join-tab state
   final TextEditingController _codeCtrl = TextEditingController();
@@ -37,7 +42,11 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    final int initialTab = widget.initialJoinCode != null ? 1 : 0;
+    _tabs = TabController(length: 2, vsync: this, initialIndex: initialTab);
+    if (widget.initialJoinCode != null) {
+      _codeCtrl.text = widget.initialJoinCode!;
+    }
   }
 
   @override
@@ -64,13 +73,22 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
     return 'Pilot_$suffix';
   }
 
+  /// On web: builds a full invite URL with the room code in the URL fragment.
+  /// On mobile: returns just the code (recipient opens the web app manually).
+  String _inviteLink(String code) {
+    if (kIsWeb) {
+      final String base = Uri.base.removeFragment().toString();
+      return '${base}#pvp=$code';
+    }
+    return code;
+  }
+
   // ---------------------------------------------------------------------------
   // Create Match
   // ---------------------------------------------------------------------------
   Future<void> _createRoom(PlayerController player) async {
     if (_createState != _CreateState.idle) return;
 
-    // 1. Generate code instantly and display it — user sees it before any network call.
     final String code = PvpService.instance.generateCode();
     setState(() {
       _roomCode = code;
@@ -78,13 +96,13 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
       _createError = null;
     });
 
-    // 2. Write to Firestore in background.
     try {
       await PvpService.instance.createRoom(
         code: code,
         uid: _myUid(),
         name: _myName(),
         shipId: player.data.selectedShipId,
+        wagerAmount: _wager,
       );
     } catch (e) {
       if (!mounted) return;
@@ -99,13 +117,14 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
     if (!mounted) return;
     setState(() => _createState = _CreateState.waiting);
 
-    // 3. Listen for opponent to join.
     _waitSub?.cancel();
     _waitSub =
         PvpService.instance.listenToRoom(code).listen((PvpRoom? room) {
       if (room == null || !mounted) return;
       if (room.status == PvpStatus.playing) {
         _waitSub?.cancel();
+        // Deduct host's wager now that match is confirmed
+        if (_wager > 0) player.spendCoins(_wager);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
@@ -114,6 +133,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
               isHost: true,
               opponentName: room.guestName ?? 'Opponent',
               opponentShipId: room.guestShipId ?? 'falcon',
+              wagerAmount: _wager,
             ),
           ),
         );
@@ -156,6 +176,111 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
       _joinError = null;
     });
 
+    // Peek at room details before committing — we need the wager amount.
+    PvpRoom? room;
+    try {
+      room = await PvpService.instance
+          .listenToRoom(code)
+          .first
+          .timeout(const Duration(seconds: 12));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _joinState = _JoinState.idle;
+        _joinError = 'Connection timed out. Check your internet.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (room == null) {
+      setState(() {
+        _joinState = _JoinState.idle;
+        _joinError = 'Room not found. Check the code.';
+      });
+      return;
+    }
+
+    final int wager = room.wagerAmount;
+
+    if (wager > 0) {
+      if (player.coins < wager) {
+        setState(() {
+          _joinState = _JoinState.idle;
+          _joinError =
+              'Not enough coins! You need $wager but have ${player.coins}.';
+        });
+        return;
+      }
+
+      // Show wager confirmation dialog.
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext ctx) => AlertDialog(
+          backgroundColor: Palette.spaceBottom,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: <Widget>[
+              const Icon(Icons.monetization_on, color: Palette.coin, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Bet $wager Coins?',
+                style: const TextStyle(
+                  color: Palette.hudYellow,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _wagerRow('Host', room!.hostName),
+              const SizedBox(height: 6),
+              _wagerRow('Prize pool', '${wager * 2} coins'),
+              _wagerRow('Your balance', '${player.coins} coins'),
+              const SizedBox(height: 12),
+              const Text(
+                'Winner takes everything!',
+                style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Palette.hudYellow,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Accept & Join',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted || confirmed != true) {
+        setState(() => _joinState = _JoinState.idle);
+        return;
+      }
+    }
+
     final String? error = await PvpService.instance.joinRoom(
       code: code,
       uid: _myUid(),
@@ -173,25 +298,39 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
       return;
     }
 
-    // Fetch room to get host details, then navigate.
-    PvpService.instance.listenToRoom(code).first.then((PvpRoom? room) {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => PvpGameScreen(
-            roomCode: code,
-            isHost: false,
-            opponentName: room?.hostName ?? 'Opponent',
-            opponentShipId: room?.hostShipId ?? 'falcon',
-          ),
+    // Deduct guest's wager.
+    if (wager > 0) player.spendCoins(wager);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => PvpGameScreen(
+          roomCode: code,
+          isHost: false,
+          opponentName: room!.hostName,
+          opponentShipId: room.hostShipId,
+          wagerAmount: wager,
         ),
-      );
-    });
+      ),
+    );
   }
 
+  Widget _wagerRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: <Widget>[
+            Text('$label: ',
+                style: const TextStyle(color: Colors.white54, fontSize: 14)),
+            Text(value,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      );
+
   String _friendlyError(String raw) {
-    if (raw.contains('permission-denied') || raw.contains('PERMISSION_DENIED')) {
+    if (raw.contains('permission-denied') ||
+        raw.contains('PERMISSION_DENIED')) {
       return 'Firebase rules error.\nGo to Firebase console → Firestore → Rules\nand paste the rules from firestore.rules file.';
     }
     if (raw.contains('TimeoutException') || raw.contains('timeout')) {
@@ -214,7 +353,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
         child: SafeArea(
           child: Column(
             children: <Widget>[
-              _header(),
+              _header(player),
               TabBar(
                 controller: _tabs,
                 indicatorColor: Palette.hudYellow,
@@ -242,7 +381,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
     );
   }
 
-  Widget _header() => Padding(
+  Widget _header(PlayerController player) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 8, 16, 4),
         child: Row(
           children: <Widget>[
@@ -265,7 +404,21 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
                 ),
               ),
             ),
-            const SizedBox(width: 48),
+            // Live coin balance
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(Icons.monetization_on, color: Palette.coin, size: 18),
+                const SizedBox(width: 4),
+                Text(
+                  '${player.coins}',
+                  style: const TextStyle(
+                      color: Palette.coin,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15),
+                ),
+              ],
+            ),
           ],
         ),
       );
@@ -274,7 +427,6 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
   // Create tab
   // ---------------------------------------------------------------------------
   Widget _createTab(PlayerController player) {
-    // Error state
     if (_createError != null) {
       return _centeredPad(Column(
         mainAxisSize: MainAxisSize.min,
@@ -297,30 +449,27 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
       ));
     }
 
-    // Code displayed (writing or waiting)
+    // Room code shown — waiting for opponent
     if (_roomCode != null) {
+      final String link = _inviteLink(_roomCode!);
       return _centeredPad(Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           const Text(
-            'Share this code with your friend:',
+            'Share with your friend:',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white60, fontSize: 15),
           ),
-          const SizedBox(height: 20),
-          // Room code card — tapping copies it
+          const SizedBox(height: 16),
+          // Room code card — tap to copy
           GestureDetector(
             onTap: () {
               Clipboard.setData(ClipboardData(text: _roomCode!));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Code copied to clipboard!'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
+              _snack('Code copied!');
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
               decoration: BoxDecoration(
                 color: Palette.spaceBottom.withOpacity(0.9),
                 borderRadius: BorderRadius.circular(18),
@@ -339,35 +488,74 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
                   Text(
                     _roomCode!,
                     style: const TextStyle(
-                      fontSize: 42,
+                      fontSize: 38,
                       fontWeight: FontWeight.w900,
                       color: Palette.hudYellow,
                       letterSpacing: 10,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Icon(Icons.copy, color: Palette.hudYellow, size: 22),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.copy, color: Palette.hudYellow, size: 20),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          // Status row
-          if (_createState == _CreateState.writing)
-            _statusRow(
-              Colors.orange,
-              const CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.orange),
-              'Saving room…',
-            )
-          else
-            _statusRow(
-              Palette.hudGreen,
-              const CircularProgressIndicator(
-                  strokeWidth: 2, color: Palette.hudGreen),
-              'Waiting for opponent…',
+          const SizedBox(height: 12),
+          // Share link button
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white70,
+              side: const BorderSide(color: Colors.white30),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
-          const SizedBox(height: 28),
+            icon: const Icon(Icons.share, size: 18),
+            label: const Text('Copy Invite Link',
+                style: TextStyle(fontSize: 13)),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: link));
+              _snack('Invite link copied! Send via WhatsApp or Messenger.');
+            },
+          ),
+          const SizedBox(height: 10),
+          // Wager badge
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.black38,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: Palette.coin.withOpacity(0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(Icons.monetization_on,
+                    color: Palette.coin, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  'Wager: $_wager  •  Prize: ${_wager * 2} coins',
+                  style: const TextStyle(
+                      color: Palette.coin, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (_createState == _CreateState.writing)
+            _statusRow(Colors.orange,
+                const CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.orange),
+                'Saving room…')
+          else
+            _statusRow(Palette.hudGreen,
+                const CircularProgressIndicator(
+                    strokeWidth: 2, color: Palette.hudGreen),
+                'Waiting for opponent…'),
+          const SizedBox(height: 24),
           TextButton.icon(
             onPressed: _cancelCreate,
             icon: const Icon(Icons.close, color: Colors.redAccent),
@@ -378,23 +566,95 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
       ));
     }
 
-    // Idle — show Create button
+    // Idle — wager picker then create button
+    final bool canAfford = player.coins >= _wager;
     return _centeredPad(Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        const Icon(Icons.sports_esports, size: 64, color: Colors.white24),
-        const SizedBox(height: 20),
+        const Icon(Icons.sports_esports, size: 56, color: Colors.white24),
+        const SizedBox(height: 18),
         const Text(
-          'Create a room and share\nthe code with your friend.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white60, fontSize: 16),
+          'Choose your wager',
+          style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700),
         ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 4),
+        const Text(
+          'Winner takes both wagers',
+          style: TextStyle(color: Colors.white38, fontSize: 13),
+        ),
+        const SizedBox(height: 20),
+        // Wager chips
+        Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          alignment: WrapAlignment.center,
+          children: <int>[10, 25, 50, 100].map((int w) {
+            final bool selected = _wager == w;
+            return GestureDetector(
+              onTap: () => setState(() => _wager = w),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? Palette.hudYellow.withOpacity(0.22)
+                      : Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color:
+                        selected ? Palette.hudYellow : Colors.white24,
+                    width: selected ? 2 : 1,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(Icons.monetization_on,
+                        color: selected ? Palette.coin : Colors.white38,
+                        size: 22),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$w',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: selected
+                            ? Palette.hudYellow
+                            : Colors.white60,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Prize pool: ${_wager * 2} coins',
+          style: const TextStyle(
+              color: Palette.coin,
+              fontSize: 14,
+              fontWeight: FontWeight.w600),
+        ),
+        if (!canAfford) ...<Widget>[
+          const SizedBox(height: 6),
+          Text(
+            'You only have ${player.coins} coins!',
+            style:
+                const TextStyle(color: Colors.redAccent, fontSize: 13),
+          ),
+        ],
+        const SizedBox(height: 28),
         _btn(
           label: 'Create Match',
           icon: Icons.add_circle_outline,
-          color: Palette.hudGreen,
-          onTap: () => _createRoom(player),
+          color: canAfford ? Palette.hudGreen : Colors.grey.shade700,
+          onTap: canAfford ? () => _createRoom(player) : () {},
         ),
       ],
     ));
@@ -406,14 +666,14 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
   Widget _joinTab(PlayerController player) => _centeredPad(Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Icon(Icons.link, size: 64, color: Colors.white24),
-          const SizedBox(height: 20),
+          const Icon(Icons.link, size: 56, color: Colors.white24),
+          const SizedBox(height: 16),
           const Text(
             'Enter your friend\'s room code',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white60, fontSize: 16),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           TextField(
             controller: _codeCtrl,
             keyboardType: TextInputType.number,
@@ -455,8 +715,8 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
           ),
           const SizedBox(height: 20),
           if (_joinState == _JoinState.joining)
-            Column(
-              children: const <Widget>[
+            const Column(
+              children: <Widget>[
                 CircularProgressIndicator(color: Palette.hudYellow),
                 SizedBox(height: 12),
                 Text('Joining…',
@@ -476,9 +736,15 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+    );
+  }
+
   Widget _centeredPad(Widget child) => Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(28),
           child: child,
         ),
       );
@@ -505,14 +771,14 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
             backgroundColor: color,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
             elevation: 6,
           ),
           icon: Icon(icon),
           label: Text(label,
-              style:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              style: const TextStyle(
+                  fontSize: 17, fontWeight: FontWeight.w800)),
           onPressed: onTap,
         ),
       );

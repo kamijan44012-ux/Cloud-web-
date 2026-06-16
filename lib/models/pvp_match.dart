@@ -11,6 +11,7 @@ class PvpRoom {
     this.guestShipId,
     required this.status,
     this.winner,
+    this.wagerAmount = 0,
   });
 
   final String code;
@@ -22,6 +23,7 @@ class PvpRoom {
   final String? guestShipId;
   final PvpStatus status;
   final String? winner; // 'host' or 'guest'
+  final int wagerAmount;
 
   bool get isFull => guestUid != null;
 
@@ -35,6 +37,7 @@ class PvpRoom {
         guestShipId: data['guestShipId'] as String?,
         status: _statusFrom(data['status'] as String? ?? 'waiting'),
         winner: data['winner'] as String?,
+        wagerAmount: (data['wagerAmount'] as num?)?.toInt() ?? 0,
       );
 
   static PvpStatus _statusFrom(String s) {
