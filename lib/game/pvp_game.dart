@@ -275,7 +275,7 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
     }
 
     for (final Bullet b in toRemove) {
-      if (b.isMounted) b.removeFromParent();
+      b.removeFromParent();
     }
   }
 

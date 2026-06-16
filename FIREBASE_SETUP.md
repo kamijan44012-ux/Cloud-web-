@@ -51,20 +51,32 @@ In the Firebase console:
 - **Analytics** is on by default.
 
 ## 7. Firestore security rules
-Start strict — players may only read/write their own save, and leaderboard
-writes are validated. Example:
+
+The complete rules file is already in the project at `firestore.rules`.
+You have two options to apply them:
+
+**Option A — Firebase CLI (recommended):**
+```bash
+firebase deploy --only firestore:rules
+# or just run:
+bash scripts/deploy_firestore_rules.sh
+```
+
+**Option B — Firebase Console (no CLI needed):**
+1. Go to [Firebase console](https://console.firebase.google.com/) → your project
+2. Firestore Database → **Rules** tab
+3. Replace everything with the contents of `firestore.rules`
+4. Click **Publish**
+
+The rules include saves, leaderboard, **and PvP rooms** (required for VS MODE):
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Each player can only touch their own save document.
     match /saves/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
-
-    // Leaderboard: read all, write only your own row, scores sanity-checked.
     match /leaderboard/{uid} {
       allow read: if true;
       allow write: if request.auth != null
@@ -73,9 +85,19 @@ service cloud.firestore {
                    && request.resource.data.score >= 0
                    && request.resource.data.score < 100000000;
     }
+    // VS MODE — any signed-in player may read/write PvP rooms
+    match /pvp_rooms/{roomId} {
+      allow read, write: if request.auth != null;
+      match /game/{docId} {
+        allow read, write: if request.auth != null;
+      }
+    }
   }
 }
 ```
+
+> **Without the pvp_rooms rule the VS MODE will hang forever** (permission
+> denied errors are silently swallowed and the spinner never stops).
 
 > For a competitive launch, validate scores server-side (Cloud Functions) — the
 > client should never be fully trusted with leaderboard numbers or IAP grants.
