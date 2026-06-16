@@ -18,12 +18,15 @@ class PvpGameScreen extends StatefulWidget {
     required this.isHost,
     required this.opponentName,
     required this.opponentShipId,
+    this.wagerAmount = 0,
   });
 
   final String roomCode;
   final bool isHost;
   final String opponentName;
   final String opponentShipId;
+  /// Coins each player wagered. Winner receives wagerAmount * 2.
+  final int wagerAmount;
 
   @override
   State<PvpGameScreen> createState() => _PvpGameScreenState();
@@ -46,8 +49,8 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
       onMatchOver: (PvpOutcome outcome) {
         if (!mounted) return;
         if (outcome == PvpOutcome.win) {
-          // Award 100 coins to the winner
-          context.read<PlayerController>().addCoins(100);
+          final int prize = widget.wagerAmount > 0 ? widget.wagerAmount * 2 : 100;
+          context.read<PlayerController>().addCoins(prize);
         }
         setState(() => _outcome = outcome);
       },
@@ -273,9 +276,9 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
               ),
               const SizedBox(height: 16),
               if (won) ...<Widget>[
-                const Text(
-                  '+100 COINS',
-                  style: TextStyle(
+                Text(
+                  '+${widget.wagerAmount > 0 ? widget.wagerAmount * 2 : 100} COINS',
+                  style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w900,
                     color: Palette.coin,
