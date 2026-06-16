@@ -95,19 +95,19 @@ class PvpService {
       }).timeout(_timeout);
 
       return null; // success
-    } on FirebaseException catch (e) {
-      debugPrint('PvpService.joinRoom FirebaseException: ${e.code} ${e.message}');
-      if (e.code == 'permission-denied') {
-        return 'Permission denied. Ask your admin to update Firestore rules '
-            '(see firestore.rules in the project).';
-      }
-      return 'Firebase error: ${e.message}';
     } catch (e) {
       debugPrint('PvpService.joinRoom error: $e');
-      if (e.toString().contains('TimeoutException')) {
+      final String msg = e.toString().toLowerCase();
+      if (msg.contains('permission-denied') || msg.contains('permission_denied')) {
+        return 'Permission denied — update Firestore rules (see firestore.rules).';
+      }
+      if (msg.contains('timeout')) {
         return 'Connection timed out. Check your internet and try again.';
       }
-      return 'Failed to join: $e';
+      if (msg.contains('unavailable') || msg.contains('network')) {
+        return 'Network error. Check your internet connection.';
+      }
+      return 'Failed to join. Try again.';
     }
   }
 
