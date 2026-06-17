@@ -58,6 +58,9 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
   /// True while the pre-match countdown is running — blocks all input and sync.
   final ValueNotifier<bool> frozen = ValueNotifier<bool>(true);
 
+  /// Normalised joystick direction set by the Flutter HUD overlay (-1..1 each axis).
+  final ValueNotifier<Offset> joystickDir = ValueNotifier<Offset>(Offset.zero);
+
   late PvpPlayerShip _myShip;
   late PvpOpponentShip _opponentShip;
 
@@ -207,12 +210,14 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
   @override
   void onDragUpdate(DragUpdateEvent event) {
     if (frozen.value || state.value != PvpState.playing) return;
+    if (joystickDir.value != Offset.zero) return; // joystick takes priority
     _myShip.targetPosition = event.canvasEndPosition;
   }
 
   @override
   void onDragStart(DragStartEvent event) {
     if (frozen.value || state.value != PvpState.playing) return;
+    if (joystickDir.value != Offset.zero) return; // joystick takes priority
     _myShip.targetPosition = event.canvasPosition;
   }
 
@@ -225,6 +230,16 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
     if (frozen.value || state.value != PvpState.playing) return;
 
     if (_shake > 0) _shake = max(0, _shake - dt * 45);
+
+    // Joystick relative movement
+    final Offset jDir = joystickDir.value;
+    if (jDir != Offset.zero && _myShip.isLoaded) {
+      const double speed = 360.0;
+      _myShip.targetPosition.x = (_myShip.position.x + jDir.dx * speed * dt)
+          .clamp(_myShip.size.x / 2, size.x - _myShip.size.x / 2);
+      _myShip.targetPosition.y = (_myShip.position.y + jDir.dy * speed * dt)
+          .clamp(size.y * 0.55, size.y - _myShip.size.y / 2 - 20);
+    }
 
     myHealthFraction.value =
         (_myShip.health / _myShip.maxHealth).clamp(0.0, 1.0);

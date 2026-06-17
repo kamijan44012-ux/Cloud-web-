@@ -83,6 +83,12 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
   double _planetTimer = 12;
   final ValueNotifier<String> banner = ValueNotifier<String>('');
 
+  /// Frozen while the pre-game countdown is showing — blocks player input.
+  final ValueNotifier<bool> frozen = ValueNotifier<bool>(true);
+
+  /// Normalised joystick direction set by the Flutter HUD overlay (-1..1 each axis).
+  final ValueNotifier<Offset> joystickDir = ValueNotifier<Offset>(Offset.zero);
+
   /// Every 3 waves the chickens get a fresh "skin" (hue + pattern).
   int get _variant => _waves.wave ~/ 3;
 
@@ -159,13 +165,15 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
   // ---------------------------------------------------------------------------
   @override
   void onDragUpdate(DragUpdateEvent event) {
-    if (state.value != RunState.playing) return;
+    if (frozen.value || state.value != RunState.playing) return;
+    if (joystickDir.value != Offset.zero) return; // joystick takes priority
     _ship.targetPosition = event.canvasEndPosition;
   }
 
   @override
   void onDragStart(DragStartEvent event) {
-    if (state.value != RunState.playing) return;
+    if (frozen.value || state.value != RunState.playing) return;
+    if (joystickDir.value != Offset.zero) return; // joystick takes priority
     _ship.targetPosition = event.canvasPosition;
   }
 
@@ -175,7 +183,17 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
   @override
   void update(double dt) {
     super.update(dt);
-    if (state.value != RunState.playing) return;
+    if (frozen.value || state.value != RunState.playing) return;
+
+    // Joystick relative movement (overrides direct-touch when knob is pushed)
+    final Offset jDir = joystickDir.value;
+    if (jDir != Offset.zero) {
+      const double speed = 360.0;
+      _ship.targetPosition.x = (_ship.position.x + jDir.dx * speed * dt)
+          .clamp(_ship.size.x / 2, size.x - _ship.size.x / 2);
+      _ship.targetPosition.y = (_ship.position.y + jDir.dy * speed * dt)
+          .clamp(size.y * 0.55, size.y - _ship.size.y / 2 - 20);
+    }
 
     buffs.tick(dt);
     activeBuffs.value = buffs.active;

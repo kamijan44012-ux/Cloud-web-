@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../config/palette.dart';
 import '../../game/pvp_game.dart';
 import '../../systems/player_controller.dart';
+import '../widgets/virtual_joystick.dart';
 
 /// Flutter shell that hosts [PvpGame] and overlays the PvP HUD:
 ///  • Opponent health bar at the top.
@@ -21,6 +22,7 @@ class PvpGameScreen extends StatefulWidget {
     required this.opponentName,
     required this.opponentShipId,
     this.wagerAmount = 0,
+    this.mobileMode = false,
   });
 
   final String roomCode;
@@ -29,6 +31,8 @@ class PvpGameScreen extends StatefulWidget {
   final String opponentShipId;
   /// Coins each player wagered. Winner receives wagerAmount * 2.
   final int wagerAmount;
+  /// When true the game canvas is constrained to a phone-like portrait frame.
+  final bool mobileMode;
 
   @override
   State<PvpGameScreen> createState() => _PvpGameScreenState();
@@ -42,6 +46,8 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
   int _countdownValue = 5;
   bool _showCountdown = true;
   Timer? _countdownTimer;
+
+  final ValueNotifier<Offset> _joystickDir = ValueNotifier<Offset>(Offset.zero);
 
   @override
   void initState() {
@@ -62,12 +68,14 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
         setState(() => _outcome = outcome);
       },
     );
+    _joystickDir.addListener(() => _game.joystickDir.value = _joystickDir.value);
     _startCountdown();
   }
 
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _joystickDir.dispose();
     super.dispose();
   }
 
@@ -92,27 +100,49 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: <Widget>[
-          GameWidget<PvpGame>(
-            game: _game,
-            loadingBuilder: (_) => const ColoredBox(
-              color: Palette.spaceTop,
-              child: Center(
-                child: CircularProgressIndicator(color: Palette.hudYellow),
-              ),
+    final Widget gameContent = Stack(
+      children: <Widget>[
+        GameWidget<PvpGame>(
+          game: _game,
+          loadingBuilder: (_) => const ColoredBox(
+            color: Palette.spaceTop,
+            child: Center(
+              child: CircularProgressIndicator(color: Palette.hudYellow),
             ),
           ),
-          _banner(),
-          _opponentHud(),
-          _myHud(),
-          if (_outcome != null) _resultOverlay(),
-          if (_showCountdown) _countdownOverlay(),
-        ],
-      ),
+        ),
+        _banner(),
+        _opponentHud(),
+        _myHud(),
+        _joystickWidget(),
+        if (_outcome != null) _resultOverlay(),
+        if (_showCountdown) _countdownOverlay(),
+      ],
     );
+
+    if (widget.mobileMode) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: AspectRatio(
+            aspectRatio: 9 / 16,
+            child: gameContent,
+          ),
+        ),
+      );
+    }
+    return Scaffold(body: gameContent);
   }
+
+  // ---------------------------------------------------------------------------
+  // Virtual joystick
+  // ---------------------------------------------------------------------------
+
+  Widget _joystickWidget() => Positioned(
+        left: 16,
+        bottom: 80, // above the health bar row
+        child: VirtualJoystick(direction: _joystickDir),
+      );
 
   // ---------------------------------------------------------------------------
   // Countdown overlay (shown before match starts)
