@@ -234,7 +234,7 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
     // Joystick relative movement
     final Offset jDir = joystickDir.value;
     if (jDir != Offset.zero && _myShip.isLoaded) {
-      const double speed = 360.0;
+      const double speed = 720.0;
       _myShip.targetPosition.x = (_myShip.position.x + jDir.dx * speed * dt)
           .clamp(_myShip.size.x / 2, size.x - _myShip.size.x / 2);
       _myShip.targetPosition.y = (_myShip.position.y + jDir.dy * speed * dt)

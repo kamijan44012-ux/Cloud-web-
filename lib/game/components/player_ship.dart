@@ -61,7 +61,7 @@ class PlayerShip extends PositionComponent
     _thrust += dt * 12;
 
     final Vector2 delta = targetPosition - position;
-    position += delta * min(1.0, dt * 12);
+    position += delta * min(1.0, dt * 22);
     position.x = position.x.clamp(size.x / 2, game.size.x - size.x / 2);
     position.y = position.y.clamp(size.y / 2, game.size.y - size.y / 2);
 

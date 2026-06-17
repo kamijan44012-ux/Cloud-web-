@@ -188,7 +188,7 @@ class ChickenHunterGame extends FlameGame with DragCallbacks, HasCollisionDetect
     // Joystick relative movement (overrides direct-touch when knob is pushed)
     final Offset jDir = joystickDir.value;
     if (jDir != Offset.zero) {
-      const double speed = 360.0;
+      const double speed = 720.0;
       _ship.targetPosition.x = (_ship.position.x + jDir.dx * speed * dt)
           .clamp(_ship.size.x / 2, size.x - _ship.size.x / 2);
       _ship.targetPosition.y = (_ship.position.y + jDir.dy * speed * dt)
