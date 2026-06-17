@@ -55,9 +55,6 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
   final ValueNotifier<PvpState> state = ValueNotifier<PvpState>(PvpState.playing);
   final ValueNotifier<String> banner = ValueNotifier<String>('');
 
-  /// True while the pre-match countdown is running — blocks all input and sync.
-  final ValueNotifier<bool> frozen = ValueNotifier<bool>(true);
-
   late PvpPlayerShip _myShip;
   late PvpOpponentShip _opponentShip;
 
@@ -126,6 +123,11 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
 
     AudioService.instance.startMusic();
     _subscribe();
+
+    banner.value = 'FIGHT!';
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (isLoaded) banner.value = '';
+    });
   }
 
   void _subscribe() {
@@ -206,13 +208,13 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
   // ---------------------------------------------------------------------------
   @override
   void onDragUpdate(DragUpdateEvent event) {
-    if (frozen.value || state.value != PvpState.playing) return;
+    if (state.value != PvpState.playing) return;
     _myShip.targetPosition = event.canvasEndPosition;
   }
 
   @override
   void onDragStart(DragStartEvent event) {
-    if (frozen.value || state.value != PvpState.playing) return;
+    if (state.value != PvpState.playing) return;
     _myShip.targetPosition = event.canvasPosition;
   }
 
@@ -222,7 +224,7 @@ class PvpGame extends FlameGame with DragCallbacks, HasCollisionDetection {
   @override
   void update(double dt) {
     super.update(dt);
-    if (frozen.value || state.value != PvpState.playing) return;
+    if (state.value != PvpState.playing) return;
 
     if (_shake > 0) _shake = max(0, _shake - dt * 45);
 

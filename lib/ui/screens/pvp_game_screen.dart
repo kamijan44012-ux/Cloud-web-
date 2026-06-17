@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -38,11 +36,6 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
   late final PvpGame _game;
   PvpOutcome? _outcome;
 
-  // Countdown state: 5 → 4 → 3 → 2 → 1 → 0 (FIGHT!)
-  int _countdownValue = 5;
-  bool _showCountdown = true;
-  Timer? _countdownTimer;
-
   @override
   void initState() {
     super.initState();
@@ -62,32 +55,6 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
         setState(() => _outcome = outcome);
       },
     );
-    _startCountdown();
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startCountdown() {
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() => _countdownValue--);
-      if (_countdownValue <= 0) {
-        timer.cancel();
-        // Unfreeze game — both players start playing simultaneously
-        _game.frozen.value = false;
-        // Show FIGHT! overlay for 1.5 s then hide it
-        Future<void>.delayed(const Duration(milliseconds: 1500), () {
-          if (mounted) setState(() => _showCountdown = false);
-        });
-      }
-    });
   }
 
   @override
@@ -108,51 +75,7 @@ class _PvpGameScreenState extends State<PvpGameScreen> {
           _opponentHud(),
           _myHud(),
           if (_outcome != null) _resultOverlay(),
-          if (_showCountdown) _countdownOverlay(),
         ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Countdown overlay (shown before match starts)
-  // ---------------------------------------------------------------------------
-
-  Widget _countdownOverlay() {
-    final bool isFight = _countdownValue <= 0;
-    final String text = isFight ? 'FIGHT!' : '$_countdownValue';
-    final Color color = isFight ? Palette.hudYellow : Colors.white;
-
-    return Container(
-      color: Colors.black.withOpacity(0.55),
-      child: Center(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          transitionBuilder: (Widget child, Animation<double> anim) =>
-              ScaleTransition(
-                scale: Tween<double>(begin: 1.6, end: 1.0).animate(
-                  CurvedAnimation(parent: anim, curve: Curves.easeOut),
-                ),
-                child: FadeTransition(opacity: anim, child: child),
-              ),
-          child: Text(
-            text,
-            key: ValueKey<String>(text),
-            style: TextStyle(
-              fontSize: isFight ? 72 : 110,
-              fontWeight: FontWeight.w900,
-              color: color,
-              letterSpacing: 4,
-              shadows: <Shadow>[
-                Shadow(
-                  color: color.withOpacity(0.85),
-                  blurRadius: 40,
-                ),
-                const Shadow(color: Colors.black87, blurRadius: 8),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
