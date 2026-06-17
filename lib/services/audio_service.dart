@@ -1,74 +1,40 @@
-import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/foundation.dart';
 
-import '../config/game_config.dart';
+import 'synth_audio.dart';
 
-/// Central SFX + music controller. Pre-caches short SFX so playback is
-/// latency-free during combat, and manages a single looping background track.
-///
-/// Drop your audio files in `assets/audio/` with the names referenced below.
-/// Missing files fail soft (logged, not crashed) so the game runs silent until
-/// you add real audio.
+/// Central SFX + music controller.
+/// On web: delegates to [SynthAudio] which synthesises all audio via the
+/// Web Audio API — no asset files required.
+/// On other platforms: SynthAudio is a no-op stub; add flame_audio files
+/// to assets/audio/ if you want native audio on those targets.
 class AudioService {
   AudioService._();
   static final AudioService instance = AudioService._();
 
-  bool sfxEnabled = true;
-  bool musicEnabled = true;
-  bool _cached = false;
+  SynthAudio get _synth => SynthAudio.instance;
 
-  static const List<String> _sfx = <String>[
-    'laser.wav',
-    'explosion.mp3',
-    'hit.wav',
-    'powerup.wav',
-    'coin.wav',
-    'boss_roar.wav',
-    'nuke.mp3',
-    'click.wav',
-    'level_up.wav',
-  ];
+  bool get sfxEnabled => _synth.sfxEnabled;
+  set sfxEnabled(bool v) => _synth.sfxEnabled = v;
+
+  bool get musicEnabled => _synth.musicEnabled;
+  set musicEnabled(bool v) => _synth.musicEnabled = v;
 
   Future<void> init() async {
-    if (!GameConfig.enableAudio) return;
-    try {
-      await FlameAudio.audioCache.loadAll(_sfx);
-      _cached = true;
-    } catch (e) {
-      debugPrint('Audio preload skipped (add files to assets/audio/): $e');
+    if (kIsWeb) {
+      _synth.init();
     }
   }
 
-  void play(String file, {double volume = 1.0}) {
-    if (!GameConfig.enableAudio || !sfxEnabled || !_cached) return;
-    try {
-      FlameAudio.play(file, volume: volume);
-    } catch (_) {/* fail soft */}
-  }
+  void laser()    => _synth.laser();
+  void hit()      => _synth.hit();
+  void explosion()=> _synth.explosion();
+  void powerUp()  {}  // future: _synth.powerUp()
+  void coin()     {}
+  void bossRoar() {}
+  void nuke()     => _synth.explosion();
+  void click()    {}
+  void levelUp()  {}
 
-  void laser() => play('laser.wav', volume: 0.4);
-  void explosion() => play('explosion.mp3', volume: 0.6);
-  void hit() => play('hit.wav', volume: 0.55);
-  void powerUp() => play('powerup.wav', volume: 0.6);
-  void coin() => play('coin.wav', volume: 0.5);
-  void bossRoar() => play('boss_roar.wav', volume: 0.7);
-  void nuke() => play('nuke.mp3', volume: 0.8);
-  void click() => play('click.wav', volume: 0.6);
-  void levelUp() => play('level_up.wav', volume: 0.7);
-
-  void startMusic([String track = 'bgm_battle.wav']) {
-    if (!GameConfig.enableAudio || !musicEnabled) return;
-    try {
-      FlameAudio.bgm.initialize();
-      FlameAudio.bgm.play(track, volume: 0.35);
-    } catch (e) {
-      debugPrint('Music skipped (add $track to assets/audio/): $e');
-    }
-  }
-
-  void stopMusic() {
-    try {
-      FlameAudio.bgm.stop();
-    } catch (_) {}
-  }
+  void startMusic([String _track = 'bgm_battle.wav']) => _synth.startBgm();
+  void stopMusic() => _synth.stopBgm();
 }
