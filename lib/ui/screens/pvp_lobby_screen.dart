@@ -14,10 +14,13 @@ import '../widgets/space_background.dart';
 import 'pvp_game_screen.dart';
 
 class PvpLobbyScreen extends StatefulWidget {
-  const PvpLobbyScreen({super.key, this.initialJoinCode});
+  const PvpLobbyScreen({super.key, this.initialJoinCode, this.mobileMode = false});
 
   /// When opened via a share link the room code arrives pre-filled.
   final String? initialJoinCode;
+
+  /// Passed through to [PvpGameScreen] so the game uses the same display mode.
+  final bool mobileMode;
 
   @override
   State<PvpLobbyScreen> createState() => _PvpLobbyScreenState();
@@ -140,6 +143,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
               opponentName: room.guestName ?? 'Opponent',
               opponentShipId: room.guestShipId ?? 'falcon',
               wagerAmount: _wager,
+              mobileMode: widget.mobileMode,
             ),
           ),
         );
@@ -316,6 +320,7 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen>
           opponentName: room!.hostName,
           opponentShipId: room.hostShipId,
           wagerAmount: wager,
+          mobileMode: widget.mobileMode,
         ),
       ),
     );

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,14 +12,15 @@ import '../../systems/achievement_system.dart';
 import '../../systems/battle_pass.dart';
 import '../../systems/mission_system.dart';
 import '../../systems/player_controller.dart';
+import '../widgets/virtual_joystick.dart';
 import 'game_over_screen.dart';
 
-/// Hosts the Flame [ChickenHunterGame] and layers the touch HUD on top:
-/// score/wave readout, health bar, active-buff chips, the ultimate button, and
-/// pause. All HUD widgets are driven by the game's ValueNotifiers so they
-/// repaint independently of the engine's render loop.
+/// Hosts the Flame [ChickenHunterGame] and layers the touch HUD on top.
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
+  const GameScreen({super.key, this.mobileMode = false});
+
+  /// When true the game canvas is constrained to a phone-like portrait frame.
+  final bool mobileMode;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -26,6 +29,13 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   late final ChickenHunterGame _game;
   RunResult? _result;
+
+  // Countdown state: 5 → 4 → 3 → 2 → 1 → 0 (GO!)
+  int _countdownValue = 5;
+  bool _showCountdown = true;
+  Timer? _countdownTimer;
+
+  final ValueNotifier<Offset> _joystickDir = ValueNotifier<Offset>(Offset.zero);
 
   @override
   void initState() {
@@ -37,6 +47,32 @@ class _GameScreenState extends State<GameScreen> {
       battlePass: context.read<BattlePassSystem>(),
       onRunOver: (RunResult r) => setState(() => _result = r),
     );
+    _joystickDir.addListener(() => _game.joystickDir.value = _joystickDir.value);
+    _startCountdown();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    _joystickDir.dispose();
+    super.dispose();
+  }
+
+  void _startCountdown() {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _countdownValue--);
+      if (_countdownValue <= 0) {
+        timer.cancel();
+        _game.frozen.value = false;
+        Future<void>.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) setState(() => _showCountdown = false);
+        });
+      }
+    });
   }
 
   void _revive() {
@@ -48,35 +84,102 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: <Widget>[
-          GameWidget<ChickenHunterGame>(
-            game: _game,
-            loadingBuilder: (_) => const ColoredBox(
-              color: Palette.spaceTop,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    CircularProgressIndicator(color: Palette.hudGreen),
-                    SizedBox(height: 16),
-                    Text('Entering the chicken galaxy…',
-                        style: TextStyle(color: Colors.white70)),
-                  ],
-                ),
+    final Widget gameContent = Stack(
+      children: <Widget>[
+        GameWidget<ChickenHunterGame>(
+          game: _game,
+          loadingBuilder: (_) => const ColoredBox(
+            color: Palette.spaceTop,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  CircularProgressIndicator(color: Palette.hudGreen),
+                  SizedBox(height: 16),
+                  Text('Entering the chicken galaxy…',
+                      style: TextStyle(color: Colors.white70)),
+                ],
               ),
             ),
           ),
-          _warpBanner(),
-          _topHud(),
-          _buffChips(),
-          _ultimateButton(),
-          if (_result != null) _gameOverOverlay(),
-        ],
+        ),
+        _warpBanner(),
+        _topHud(),
+        _buffChips(),
+        _ultimateButton(),
+        _joystickWidget(),
+        if (_result != null) _gameOverOverlay(),
+        if (_showCountdown) _countdownOverlay(),
+      ],
+    );
+
+    if (widget.mobileMode) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: AspectRatio(
+            aspectRatio: 9 / 16,
+            child: gameContent,
+          ),
+        ),
+      );
+    }
+    return Scaffold(body: gameContent);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Countdown overlay
+  // ---------------------------------------------------------------------------
+
+  Widget _countdownOverlay() {
+    final bool isGo = _countdownValue <= 0;
+    final String text = isGo ? 'GO!' : '$_countdownValue';
+    final Color color = isGo ? Palette.hudGreen : Colors.white;
+
+    return Container(
+      color: Colors.black.withOpacity(0.55),
+      child: Center(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          transitionBuilder: (Widget child, Animation<double> anim) =>
+              ScaleTransition(
+                scale: Tween<double>(begin: 1.6, end: 1.0).animate(
+                  CurvedAnimation(parent: anim, curve: Curves.easeOut),
+                ),
+                child: FadeTransition(opacity: anim, child: child),
+              ),
+          child: Text(
+            text,
+            key: ValueKey<String>(text),
+            style: TextStyle(
+              fontSize: isGo ? 80 : 110,
+              fontWeight: FontWeight.w900,
+              color: color,
+              letterSpacing: 4,
+              shadows: <Shadow>[
+                Shadow(color: color.withOpacity(0.85), blurRadius: 40),
+                const Shadow(color: Colors.black87, blurRadius: 8),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Virtual joystick
+  // ---------------------------------------------------------------------------
+
+  Widget _joystickWidget() => Positioned(
+        left: 16,
+        bottom: 24,
+        child: VirtualJoystick(direction: _joystickDir),
+      );
+
+  // ---------------------------------------------------------------------------
+  // HUD widgets
+  // ---------------------------------------------------------------------------
 
   Widget _topHud() {
     return SafeArea(
@@ -85,7 +188,6 @@ class _GameScreenState extends State<GameScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Pause + compact health, stacked on the left.
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -109,7 +211,6 @@ class _GameScreenState extends State<GameScreen> {
               ],
             ),
             const Spacer(),
-            // Score + wave, compact pills on the right.
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
@@ -121,7 +222,8 @@ class _GameScreenState extends State<GameScreen> {
                 const SizedBox(height: 6),
                 ValueListenableBuilder<int>(
                   valueListenable: _game.wave,
-                  builder: (_, int w, __) => _badge('WAVE $w', Palette.nebulaPink.withOpacity(0.85)),
+                  builder: (_, int w, __) =>
+                      _badge('WAVE $w', Palette.nebulaPink.withOpacity(0.85)),
                 ),
               ],
             ),
@@ -131,7 +233,6 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  /// Compact, modern health capsule: heart icon + slim gradient bar + percent.
   Widget _healthBar() {
     return ValueListenableBuilder<double>(
       valueListenable: _game.healthFraction,
@@ -171,7 +272,9 @@ class _GameScreenState extends State<GameScreen> {
                         colors: <Color>[fill.withOpacity(0.7), fill],
                       ),
                       borderRadius: BorderRadius.circular(4),
-                      boxShadow: <BoxShadow>[BoxShadow(color: fill.withOpacity(0.6), blurRadius: 5)],
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(color: fill.withOpacity(0.6), blurRadius: 5)
+                      ],
                     ),
                   ),
                 ],
@@ -180,7 +283,8 @@ class _GameScreenState extends State<GameScreen> {
               SizedBox(
                 width: 32,
                 child: Text('${(hp * 100).round()}%',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -189,7 +293,6 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  /// Big centered banner shown during warps / boss intros.
   Widget _warpBanner() {
     return Positioned(
       top: 0,
@@ -214,7 +317,8 @@ class _GameScreenState extends State<GameScreen> {
                     letterSpacing: 2,
                     shadows: <Shadow>[
                       const Shadow(color: Palette.hudBlue, blurRadius: 18),
-                      Shadow(color: Colors.black.withOpacity(0.6), blurRadius: 4),
+                      Shadow(
+                          color: Colors.black.withOpacity(0.6), blurRadius: 4),
                     ],
                   ),
                 ),
@@ -228,7 +332,7 @@ class _GameScreenState extends State<GameScreen> {
 
   Widget _buffChips() {
     return Positioned(
-      left: 12,
+      left: 148, // offset right so it doesn't overlap the joystick
       bottom: 24,
       child: ValueListenableBuilder<Map<PowerUpType, double>>(
         valueListenable: _game.activeBuffs,
@@ -238,7 +342,8 @@ class _GameScreenState extends State<GameScreen> {
             final PowerUpInfo info = PowerUpInfo.table[e.key]!;
             return Container(
               margin: const EdgeInsets.only(top: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: info.color.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(12),
@@ -270,7 +375,11 @@ class _GameScreenState extends State<GameScreen> {
                 color: ready ? Palette.hudRed : Colors.black54,
                 border: Border.all(color: Palette.hudYellow, width: 3),
                 boxShadow: ready
-                    ? <BoxShadow>[BoxShadow(color: Palette.hudRed.withOpacity(0.7), blurRadius: 18)]
+                    ? <BoxShadow>[
+                        BoxShadow(
+                            color: Palette.hudRed.withOpacity(0.7),
+                            blurRadius: 18)
+                      ]
                     : null,
               ),
               child: Stack(
@@ -283,7 +392,8 @@ class _GameScreenState extends State<GameScreen> {
                       value: charge,
                       strokeWidth: 5,
                       backgroundColor: Colors.white24,
-                      valueColor: const AlwaysStoppedAnimation<Color>(Palette.hudYellow),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                          Palette.hudYellow),
                     ),
                   ),
                   const Text('☢', style: TextStyle(fontSize: 30)),
@@ -296,7 +406,9 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  Widget _badge(String text, Color color, {IconData? icon, Color? iconColor}) => Container(
+  Widget _badge(String text, Color color,
+          {IconData? icon, Color? iconColor}) =>
+      Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: color,
@@ -310,7 +422,9 @@ class _GameScreenState extends State<GameScreen> {
               Icon(icon, size: 14, color: iconColor ?? Colors.white),
               const SizedBox(width: 4),
             ],
-            Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            Text(text,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 13)),
           ],
         ),
       );
@@ -350,7 +464,8 @@ class _GameScreenState extends State<GameScreen> {
         AdsService.instance.maybeShowInterstitial();
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute<void>(builder: (_) => const GameScreen()),
+          MaterialPageRoute<void>(
+              builder: (_) => GameScreen(mobileMode: widget.mobileMode)),
         );
       },
       onMenu: () {
