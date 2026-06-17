@@ -1,11 +1,7 @@
-# Builds the Flutter web version of Chicken Hunter: Space War and deploys it
-# to the gh-pages branch, which GitHub Pages then serves automatically.
+# Builds the Flutter web version of Chicken Hunter: Space War and deploys it to
+# GitHub Pages automatically on every push to the main development branch.
 #
-# One-time setup (if you haven't already):
-#   Repo → Settings → Pages → Build and deployment
-#     Source: "Deploy from a branch"
-#     Branch: gh-pages  /  (root)
-#   Save — that's it. The workflow does everything else.
+# GitHub Pages must be configured with Source: "GitHub Actions" in repo settings.
 name: Deploy web to GitHub Pages
 
 on:
@@ -14,19 +10,19 @@ on:
       - main
       - master
       - "claude/**"
-  workflow_dispatch: # allow manual runs from the Actions tab
+  workflow_dispatch:
 
-# Write access to push the gh-pages branch.
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
-# Only one Pages deployment at a time; cancel superseded in-progress runs.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,8 +31,6 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          # Flame 1.23+ uses the Flutter 3.27 Color API (withValues / Color.a),
-          # so the SDK must be >= 3.27.
           flutter-version: "3.27.4"
           channel: stable
           cache: true
@@ -45,15 +39,11 @@ jobs:
         run: flutter pub get
 
       - name: Generate web platform files
-        # The repo doesn't commit generated web/ scaffolding; create it for the
-        # exact Flutter version in use. Non-destructive to lib/ and android/.
         run: |
           flutter create --platforms=web --project-name chicken_hunter_space_war .
           rm -f test/widget_test.dart
 
       - name: Inject Firebase config from secrets
-        # Overwrites the stub firebase_options.dart with real values when the
-        # GitHub secrets are present.
         env:
           FB_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FB_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
@@ -106,29 +96,35 @@ jobs:
           print('Firebase options injected successfully.')
           PYEOF
           else
-            echo "Firebase secrets not set — building with stub options (offline mode)."
+            echo "Firebase secrets not set — building with stub options."
           fi
 
       - name: Analyze (non-blocking)
         run: flutter analyze || true
 
       - name: Build web
-        # base-href must match the GitHub Pages sub-path (/<repo-name>/).
         run: >
           flutter build web --release
           --web-renderer canvaskit
           --base-href "/${{ github.event.repository.name }}/"
 
       - name: Add SPA + Jekyll fixups
-        # 404.html lets deep links work; .nojekyll stops Pages from hiding
-        # files/folders that start with an underscore (Flutter emits some).
         run: |
           cp build/web/index.html build/web/404.html
           touch build/web/.nojekyll
 
-      - name: Deploy to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build/web
-          force_orphan: true
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
