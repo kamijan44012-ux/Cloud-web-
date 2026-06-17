@@ -1,8 +1,10 @@
 import 'dart:math';
+import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart' show Color, Colors;
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show KeyEventResult;
 
 import '../services/audio_service.dart';
 import 'fight_data.dart';
