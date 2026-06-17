@@ -1,12 +1,11 @@
-# Builds the Flutter web version of Chicken Hunter: Space War and deploys it to
-# GitHub Pages automatically on every push to the main development branch.
+# Builds the Flutter web version of Chicken Hunter: Space War and deploys it
+# to the gh-pages branch, which GitHub Pages then serves automatically.
 #
-# Before the first run, enable Pages once in the repo:
-#   Settings → Pages → Build and deployment → Source: "GitHub Actions".
-#
-# The game's mobile-only plugins (AdMob, Play Billing) are auto-disabled on web
-# via kIsWeb in lib/config/game_config.dart, so the web build is clean. Firebase
-# and audio still work (fail-soft without config).
+# One-time setup (if you haven't already):
+#   Repo → Settings → Pages → Build and deployment
+#     Source: "Deploy from a branch"
+#     Branch: gh-pages  /  (root)
+#   Save — that's it. The workflow does everything else.
 name: Deploy web to GitHub Pages
 
 on:
@@ -17,11 +16,9 @@ on:
       - "claude/**"
   workflow_dispatch: # allow manual runs from the Actions tab
 
-# Allow this workflow to publish to Pages.
+# Write access to push the gh-pages branch.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # Only one Pages deployment at a time; cancel superseded in-progress runs.
 concurrency:
@@ -29,7 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,8 +36,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           # Flame 1.23+ uses the Flutter 3.27 Color API (withValues / Color.a),
-          # so the SDK must be >= 3.27. Keep this pinned and in lockstep with the
-          # flame version in pubspec.yaml.
+          # so the SDK must be >= 3.27.
           flutter-version: "3.27.4"
           channel: stable
           cache: true
@@ -51,19 +47,13 @@ jobs:
       - name: Generate web platform files
         # The repo doesn't commit generated web/ scaffolding; create it for the
         # exact Flutter version in use. Non-destructive to lib/ and android/.
-        # `flutter create` also drops a default test/widget_test.dart referencing
-        # a non-existent MyApp — remove it so it doesn't pollute analysis.
         run: |
           flutter create --platforms=web --project-name chicken_hunter_space_war .
           rm -f test/widget_test.dart
 
       - name: Inject Firebase config from secrets
         # Overwrites the stub firebase_options.dart with real values when the
-        # GitHub secrets are present. Add these in:
-        #   Repo → Settings → Secrets and variables → Actions → New secret
-        # Required secrets: FIREBASE_API_KEY, FIREBASE_APP_ID,
-        #   FIREBASE_MESSAGING_SENDER_ID, FIREBASE_PROJECT_ID,
-        #   FIREBASE_AUTH_DOMAIN, FIREBASE_STORAGE_BUCKET
+        # GitHub secrets are present.
         env:
           FB_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FB_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
@@ -124,7 +114,6 @@ jobs:
 
       - name: Build web
         # base-href must match the GitHub Pages sub-path (/<repo-name>/).
-        # canvaskit renderer gives the smoothest Canvas/particle performance.
         run: >
           flutter build web --release
           --web-renderer canvaskit
@@ -137,18 +126,9 @@ jobs:
           cp build/web/index.html build/web/404.html
           touch build/web/.nojekyll
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: build/web
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          force_orphan: true
