@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 class GameConfig {
   GameConfig._();
 
-  static const String appName = 'Chicken Hunter: Space War';
+  static const String appName = 'Fight Arena';
   static const String version = '1.0.0';
 
   // ---------------------------------------------------------------------------

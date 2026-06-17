@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../config/game_config.dart';
 import '../config/palette.dart';
-import 'screens/main_menu_screen.dart';
+import 'screens/fight_screen.dart';
 import 'screens/pvp_lobby_screen.dart';
 
 class ChickenHunterApp extends StatelessWidget {
@@ -61,7 +61,7 @@ class _HomeBootstrapState extends State<_HomeBootstrap> {
   }
 
   @override
-  Widget build(BuildContext context) => const MainMenuScreen();
+  Widget build(BuildContext context) => const FightScreen();
 }
 
 /// Parses `#pvp=XXXXXX` from the current web URL.
