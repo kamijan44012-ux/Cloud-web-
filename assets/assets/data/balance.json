@@ -1,0 +1,11 @@
+{
+  "_comment": "Sample live-ops balance file. Mirror these keys in Firebase Remote Config to tune the live game without shipping an update. The code reads sensible defaults from lib/config + lib/models; these values document the intended knobs.",
+  "enemy_health_multiplier": 1.0,
+  "coin_drop_multiplier": 1.0,
+  "powerup_drop_chance": 0.12,
+  "boss_wave_interval": 5,
+  "giant_boss_wave_interval": 10,
+  "event_name": "none",
+  "gem_sale_percent": 0,
+  "daily_reward_day7_gems": 50
+}
