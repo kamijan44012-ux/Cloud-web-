@@ -15,6 +15,7 @@ import 'leaderboard_screen.dart';
 import 'missions_screen.dart';
 import 'settings_screen.dart';
 import 'shop_screen.dart';
+import 'fight_screen.dart';
 import 'upgrade_screen.dart';
 
 class MainMenuScreen extends StatefulWidget {
@@ -192,6 +193,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                             color: Palette.hudRed,
                             subtitle: '1v1 Online — Winner gets 100 coins',
                             onTap: _startVs,
+                          ),
+                          const SizedBox(height: 12),
+                          MenuButton(
+                            label: 'FIGHT GAME',
+                            icon: Icons.sports_kabaddi,
+                            color: const Color(0xFFFF4400),
+                            subtitle: 'Street Fighter — VS Bot or 2 Players',
+                            onTap: () => _go(const FightScreen()),
                           ),
                           const SizedBox(height: 12),
                           Row(
